@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -8,9 +8,9 @@ const dataDir = path.join(__dirname, 'data');
 fs.mkdirSync(dataDir, { recursive: true });
 
 const dbPath = path.join(dataDir, 'analytics.sqlite');
-export const db = new Database(dbPath);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+export const db = new DatabaseSync(dbPath);
+db.exec('PRAGMA journal_mode = WAL');
+db.exec('PRAGMA foreign_keys = ON');
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS devices (
@@ -62,6 +62,18 @@ CREATE INDEX IF NOT EXISTS idx_xapi_instance ON xapi_statements(instance_id);
 `;
 
 db.exec(SCHEMA);
+
+export function transaction(fn) {
+  db.exec('BEGIN');
+  try {
+    const result = fn();
+    db.exec('COMMIT');
+    return result;
+  } catch (e) {
+    try { db.exec('ROLLBACK'); } catch (_) { /* ignore */ }
+    throw e;
+  }
+}
 
 export function upsertDevice(deviceId, now) {
   db.prepare(`

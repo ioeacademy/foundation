@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { db, upsertDevice } from '../db.js';
+import { db, upsertDevice, transaction } from '../db.js';
 
 const router = Router();
 
@@ -19,44 +19,46 @@ const insertStatement = db.prepare(`
           @statementJson, @recordedAt, @ingestedAt)
 `);
 
-const ingestTx = db.transaction((deviceId, lineageEntries, statements, now) => {
-  upsertDevice(deviceId, now);
-  let lineageAccepted = 0, lineageDup = 0, stAccepted = 0, stDup = 0;
+function runIngest(deviceId, lineageEntries, statements, now) {
+  return transaction(() => {
+    upsertDevice(deviceId, now);
+    let lineageAccepted = 0, lineageDup = 0, stAccepted = 0, stDup = 0;
 
-  for (const e of lineageEntries) {
-    const r = insertLineage.run({
-      eventId: e.eventId,
-      courseId: e.courseId,
-      courseVersion: e.courseVersion,
-      instanceId: e.instanceId,
-      parentInstanceId: e.parentInstanceId ?? null,
-      fromDeviceId: e.fromDeviceId ?? null,
-      toDeviceId: e.toDeviceId,
-      sharedAt: e.sharedAt,
-      transport: e.transport,
-      locationJson: e.location ? JSON.stringify(e.location) : null,
-      ingestedAt: now
-    });
-    if (r.changes === 1) lineageAccepted++; else lineageDup++;
-  }
+    for (const e of lineageEntries) {
+      const r = insertLineage.run({
+        eventId: e.eventId,
+        courseId: e.courseId,
+        courseVersion: e.courseVersion,
+        instanceId: e.instanceId,
+        parentInstanceId: e.parentInstanceId ?? null,
+        fromDeviceId: e.fromDeviceId ?? null,
+        toDeviceId: e.toDeviceId,
+        sharedAt: e.sharedAt,
+        transport: e.transport,
+        locationJson: e.location ? JSON.stringify(e.location) : null,
+        ingestedAt: now
+      });
+      if (r.changes === 1) lineageAccepted++; else lineageDup++;
+    }
 
-  for (const s of statements) {
-    const r = insertStatement.run({
-      statementId: s.statementId,
-      deviceId: s.deviceId,
-      instanceId: s.instanceId,
-      courseId: s.courseId,
-      verb: s.statement?.verb?.id || '',
-      objectId: s.statement?.object?.id || '',
-      statementJson: JSON.stringify(s.statement),
-      recordedAt: s.recordedAt,
-      ingestedAt: now
-    });
-    if (r.changes === 1) stAccepted++; else stDup++;
-  }
+    for (const s of statements) {
+      const r = insertStatement.run({
+        statementId: s.statementId,
+        deviceId: s.deviceId,
+        instanceId: s.instanceId,
+        courseId: s.courseId,
+        verb: s.statement?.verb?.id || '',
+        objectId: s.statement?.object?.id || '',
+        statementJson: JSON.stringify(s.statement),
+        recordedAt: s.recordedAt,
+        ingestedAt: now
+      });
+      if (r.changes === 1) stAccepted++; else stDup++;
+    }
 
-  return { lineageAccepted, lineageDup, stAccepted, stDup };
-});
+    return { lineageAccepted, lineageDup, stAccepted, stDup };
+  });
+}
 
 router.post('/ingest', (req, res) => {
   const { deviceId, lineageEntries = [], statements = [] } = req.body || {};
@@ -69,7 +71,7 @@ router.post('/ingest', (req, res) => {
 
   const now = new Date().toISOString();
   try {
-    const r = ingestTx(deviceId, lineageEntries, statements, now);
+    const r = runIngest(deviceId, lineageEntries, statements, now);
     res.json({
       accepted: { lineage: r.lineageAccepted, statements: r.stAccepted },
       duplicates: { lineage: r.lineageDup, statements: r.stDup }
