@@ -1,0 +1,15 @@
+{
+  "name": "foundation",
+  "private": true,
+  "version": "0.1.0",
+  "description": "P2P educational content sharing - PoC",
+  "workspaces": [
+    "server",
+    "pwa",
+    "shared"
+  ],
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js"
+  }
+}

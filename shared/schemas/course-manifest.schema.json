@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CourseManifest",
+  "type": "object",
+  "required": ["id", "version", "title", "entry", "assets", "contentHash", "xapiVerbWhitelist"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "title": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "description": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "entry": { "type": "string" },
+    "assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256"],
+        "properties": {
+          "path": { "type": "string" },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "size": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "contentHash": { "type": "string" },
+    "xapiVerbWhitelist": {
+      "type": "array",
+      "items": { "type": "string", "format": "uri" }
+    },
+    "publisher": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "publishedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "sizeBytes": { "type": "integer", "minimum": 0 }
+  }
+}

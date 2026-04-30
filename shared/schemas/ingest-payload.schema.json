@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "IngestPayload",
+  "type": "object",
+  "required": ["deviceId"],
+  "properties": {
+    "deviceId": { "type": "string" },
+    "lineageEntries": { "type": "array", "items": { "$ref": "lineage-entry.schema.json" } },
+    "statements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["statementId", "deviceId", "instanceId", "courseId", "statement", "recordedAt"],
+        "properties": {
+          "statementId": { "type": "string" },
+          "deviceId": { "type": "string" },
+          "instanceId": { "type": "string" },
+          "courseId": { "type": "string" },
+          "statement": { "$ref": "xapi-statement.schema.json" },
+          "recordedAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}

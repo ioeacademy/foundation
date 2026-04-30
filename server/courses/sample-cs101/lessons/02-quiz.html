@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quiz finale</title>
+<link rel="stylesheet" href="../assets/style.css">
+<script src="../xapi-bridge.js"></script>
+</head>
+<body>
+<h1>Quiz finale</h1>
+<p>Rispondi alle tre domande e premi <em>Invia</em>.</p>
+
+<form id="quiz">
+  <div class="q" data-qid="q1" data-correct="b">
+    <p><strong>1.</strong> Qual &egrave; il componente che esegue le istruzioni?</p>
+    <label><input type="radio" name="q1" value="a"> Memoria</label>
+    <label><input type="radio" name="q1" value="b"> CPU</label>
+    <label><input type="radio" name="q1" value="c"> Storage</label>
+  </div>
+
+  <div class="q" data-qid="q2" data-correct="c">
+    <p><strong>2.</strong> Quale tra questi NON &egrave; un dispositivo I/O?</p>
+    <label><input type="radio" name="q2" value="a"> Tastiera</label>
+    <label><input type="radio" name="q2" value="b"> Schermo</label>
+    <label><input type="radio" name="q2" value="c"> RAM</label>
+  </div>
+
+  <div class="q" data-qid="q3" data-correct="a">
+    <p><strong>3.</strong> Un telefono cellulare moderno &egrave; un computer?</p>
+    <label><input type="radio" name="q3" value="a"> S&igrave;</label>
+    <label><input type="radio" name="q3" value="b"> No</label>
+  </div>
+
+  <button type="submit">Invia</button>
+</form>
+
+<div id="feedback"></div>
+
+<script>
+  window.xapi.send('http://adlnet.gov/expapi/verbs/experienced', 'cs101://lesson/02');
+
+  document.getElementById('quiz').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var questions = document.querySelectorAll('.q');
+    var correct = 0;
+    questions.forEach(function (q) {
+      var qid = q.getAttribute('data-qid');
+      var expected = q.getAttribute('data-correct');
+      var picked = q.querySelector('input[type=radio]:checked');
+      var pickedVal = picked ? picked.value : null;
+      var ok = pickedVal === expected;
+      if (ok) correct++;
+      window.xapi.send('http://adlnet.gov/expapi/verbs/answered', 'cs101://question/' + qid, {
+        success: ok,
+        response: pickedVal
+      });
+    });
+    var total = questions.length;
+    var fb = document.getElementById('feedback');
+    fb.className = 'feedback ' + (correct === total ? 'ok' : 'ko');
+    fb.textContent = 'Hai risposto correttamente a ' + correct + ' su ' + total + ' domande.';
+    window.xapi.send('http://adlnet.gov/expapi/verbs/completed', 'cs101://course', {
+      success: correct === total,
+      completion: true,
+      score: { raw: correct, min: 0, max: total }
+    });
+  });
+</script>
+</body>
+</html>

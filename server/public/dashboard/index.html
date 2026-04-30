@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Foundation · Dashboard</title>
+<link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+<header>
+  <h1>Foundation · Analytics</h1>
+  <p class="muted">Aggregati di propagazione e attività di apprendimento raccolti dai dispositivi che hanno avuto connettività.</p>
+</header>
+<section id="courses">
+  <h2>Corsi</h2>
+  <div id="courses-list"></div>
+</section>
+<section id="detail" hidden>
+  <h2 id="detail-title"></h2>
+  <div class="grid">
+    <div class="panel">
+      <h3>Catena di propagazione</h3>
+      <div id="lineage-tree"></div>
+    </div>
+    <div class="panel">
+      <h3>Verbi xAPI</h3>
+      <div id="verb-chart"></div>
+      <h4>Statement recenti</h4>
+      <div id="recent"></div>
+    </div>
+  </div>
+</section>
+<script src="dashboard.js"></script>
+</body>
+</html>

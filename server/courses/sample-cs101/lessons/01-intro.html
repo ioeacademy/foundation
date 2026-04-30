@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lezione 1 &mdash; Cos'&egrave; un computer</title>
+<link rel="stylesheet" href="../assets/style.css">
+<script src="../xapi-bridge.js"></script>
+</head>
+<body>
+<h1>Lezione 1 &mdash; Cos'&egrave; un computer</h1>
+<p>Un <strong>computer</strong> &egrave; una macchina programmabile in grado di eseguire sequenze di istruzioni per elaborare dati. Le sue componenti principali sono:</p>
+<ul>
+  <li><strong>CPU</strong> &mdash; unit&agrave; di elaborazione</li>
+  <li><strong>Memoria</strong> &mdash; conserva dati e istruzioni</li>
+  <li><strong>Storage</strong> &mdash; conservazione persistente</li>
+  <li><strong>I/O</strong> &mdash; ingresso/uscita verso l'utente o la rete</li>
+</ul>
+<p>Anche il telefono che stai usando per leggere questa pagina &egrave; un computer.</p>
+<nav>
+  <a class="btn" href="02-quiz.html" id="next">Vai al quiz &rarr;</a>
+</nav>
+<p><small>Lezione 1 / 2</small></p>
+<script>
+  window.xapi.send('http://adlnet.gov/expapi/verbs/experienced', 'cs101://lesson/01');
+  document.getElementById('next').addEventListener('click', function () {
+    window.xapi.send('http://adlnet.gov/expapi/verbs/progressed', 'cs101://lesson/01', { completion: true });
+  });
+</script>
+</body>
+</html>

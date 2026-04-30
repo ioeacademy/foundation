@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LineageEntry",
+  "type": "object",
+  "required": ["eventId", "courseId", "courseVersion", "instanceId", "toDeviceId", "sharedAt", "transport"],
+  "properties": {
+    "eventId": { "type": "string", "minLength": 1 },
+    "courseId": { "type": "string" },
+    "courseVersion": { "type": "string" },
+    "instanceId": { "type": "string" },
+    "parentInstanceId": { "type": ["string", "null"] },
+    "fromDeviceId": { "type": ["string", "null"] },
+    "toDeviceId": { "type": "string" },
+    "sharedAt": { "type": "string", "format": "date-time" },
+    "transport": { "enum": ["server-download", "p2p-webrtc"] },
+    "location": {
+      "type": ["object", "null"],
+      "properties": {
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "accuracy": { "type": "number" }
+      }
+    }
+  }
+}

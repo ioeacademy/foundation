@@ -1,0 +1,22 @@
+{
+  "id": "cs101",
+  "version": "1.0.0",
+  "title": {
+    "it": "Introduzione all'Informatica",
+    "en": "Introduction to Computer Science"
+  },
+  "description": {
+    "it": "Un corso introduttivo di esempio con quiz, pensato per dimostrare la condivisione P2P di materiale didattico.",
+    "en": "A sample intro course with a quiz, used to demonstrate P2P courseware sharing."
+  },
+  "entry": "index.html",
+  "xapiVerbWhitelist": [
+    "http://adlnet.gov/expapi/verbs/experienced",
+    "http://adlnet.gov/expapi/verbs/progressed",
+    "http://adlnet.gov/expapi/verbs/answered",
+    "http://adlnet.gov/expapi/verbs/completed"
+  ],
+  "publisher": {
+    "name": "Foundation PoC"
+  }
+}

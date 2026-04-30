@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "XapiStatement",
+  "type": "object",
+  "required": ["id", "actor", "verb", "object", "timestamp"],
+  "properties": {
+    "id": { "type": "string" },
+    "actor": {
+      "type": "object",
+      "properties": {
+        "account": {
+          "type": "object",
+          "properties": {
+            "homePage": { "type": "string" },
+            "name": { "type": "string" }
+          }
+        },
+        "name": { "type": "string" }
+      }
+    },
+    "verb": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "format": "uri" },
+        "display": { "type": "object" }
+      }
+    },
+    "object": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string" },
+        "definition": { "type": "object" }
+      }
+    },
+    "result": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "completion": { "type": "boolean" },
+        "score": {
+          "type": "object",
+          "properties": {
+            "raw": { "type": "number" },
+            "min": { "type": "number" },
+            "max": { "type": "number" }
+          }
+        }
+      }
+    },
+    "timestamp": { "type": "string", "format": "date-time" }
+  }
+}

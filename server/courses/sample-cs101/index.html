@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Introduzione all'Informatica</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="xapi-bridge.js"></script>
+</head>
+<body>
+<h1>Introduzione all'Informatica</h1>
+<p>Benvenuto al corso di esempio. Questo corso dimostra come materiale didattico HTML pu&ograve; essere condiviso da un dispositivo all'altro senza connessione Internet.</p>
+<p>Il corso &egrave; composto da due brevi lezioni e un quiz finale.</p>
+<nav>
+  <a class="btn" href="lessons/01-intro.html">Inizia &rarr;</a>
+</nav>
+<p><small>cs101 &middot; v1.0.0</small></p>
+<script>
+  window.xapi.send('http://adlnet.gov/expapi/verbs/experienced', 'cs101://home');
+</script>
+</body>
+</html>
