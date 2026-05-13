@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Quantum Spectroscopy Explorer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js from CDN -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000000; color: white; font-family: 'Segoe UI', sans-serif; }
+        canvas { display: block; outline: none; }
+        
+        /* Custom UI Styling */
+        input[type=range] {
+            -webkit-appearance: none; width: 100%; background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; 
+            height: 24px; width: 24px; 
+            border-radius: 50%;
+            background: #ffffff; 
+            cursor: pointer; 
+            margin-top: -8px; 
+            box-shadow: 0 0 10px rgba(255,255,255,0.8);
+            border: 2px solid #1f2937;
+            position: relative; z-index: 20;
+            transition: transform 0.1s;
+        }
+        input[type=range]::-webkit-slider-thumb:hover {
+            transform: scale(1.1);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 8px; cursor: pointer; border-radius: 4px;
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+        }
+        #energySlider::-webkit-slider-runnable-track {
+            background: linear-gradient(90deg, #330000 0%, #ff0000 15%, #00ff00 25%, #0000ff 35%, #8b00ff 45%, #4b0082 100%);
+        }
+        #intensitySlider::-webkit-slider-runnable-track { background: #374151; }
+        
+        /* Snapped state for slider */
+        input[type=range].snapped::-webkit-slider-thumb {
+            background: #00ffff;
+            box-shadow: 0 0 15px #00ffff;
+            border-color: white;
+        }
+
+        .slider-tick {
+            position: absolute; 
+            width: 3px; 
+            height: 16px; 
+            background-color: rgba(255,255,255,0.8);
+            top: 50%; transform: translateY(-50%); pointer-events: none;
+            transition: height 0.2s, background-color 0.2s;
+            border-radius: 2px;
+        }
+        .slider-tick.active {
+            height: 28px; 
+            background-color: #00ffff;
+            box-shadow: 0 0 8px #00ffff;
+            z-index: 10;
+        }
+        .slider-tick:hover::after, .slider-tick.active::after {
+            content: attr(data-label); position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
+            background: #111827; padding: 4px 8px; font-size: 12px; border-radius: 4px; white-space: nowrap; 
+            border: 1px solid #4b5563; color: white; font-weight: bold; z-index: 30;
+        }
+        
+        #loading-overlay {
+            position: absolute; top:0; left:0; width:100%; height:100%; background: #000;
+            display: flex; justify-content: center; align-items: center; z-index: 50; transition: opacity 0.5s;
+        }
+        
+        /* High contrast button classes */
+        .btn-active {
+            background-color: #2563eb; color: white; box-shadow: 0 0 10px rgba(37,99,235,0.5); border: 1px solid #60a5fa;
+        }
+        .btn-inactive {
+            background-color: #1f2937; color: #9ca3af; border: 1px solid #374151;
+        }
+        .btn-inactive:hover {
+            background-color: #374151; color: white;
+        }
+        
+        .scientist-img {
+            width: 28px; height: 28px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(255,255,255,0.2);
+            filter: grayscale(100%); transition: all 0.3s;
+        }
+        .btn-active .scientist-img {
+            filter: grayscale(0%); border-color: white;
+        }
+        .btn-inactive:hover .scientist-img {
+            filter: grayscale(0%);
+        }
+
+        /* Dragging styles */
+        #electron-arrow {
+            cursor: grab;
+            pointer-events: auto !important; /* Enable interaction */
+        }
+        #electron-arrow:active {
+            cursor: grabbing;
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen w-full bg-black">
+
+    <!-- Loading Screen -->
+    <div id="loading-overlay">
+        <div class="text-blue-400 font-mono font-bold text-xl animate-pulse">Loading Physics Engine...</div>
+    </div>
+
+    <!-- Header -->
+    <div class="bg-gray-950 p-4 border-b border-gray-700 flex justify-between items-center shrink-0 z-10 w-full shadow-lg">
+        <div>
+            <h1 class="text-xl font-bold text-blue-400 flex items-center gap-3">
+                <div class="p-1.5 bg-blue-900/30 rounded-lg border border-blue-500/50">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+                </div>
+                Hydrogen Spectroscopy
+            </h1>
+        </div>
+        
+        <div class="flex items-center gap-6">
+            <!-- Model Selector -->
+            <div class="flex bg-gray-900 rounded-lg p-1.5 border border-gray-600 gap-2">
+                <button onclick="window.app.setModel('bohr')" id="btn-bohr" class="flex items-center gap-2 text-sm px-3 py-1.5 rounded font-medium transition-all">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/Niels_Bohr.jpg/220px-Niels_Bohr.jpg" class="scientist-img">
+                    <span>Bohr</span>
+                </button>
+                <button onclick="window.app.setModel('debroglie')" id="btn-debroglie" class="flex items-center gap-2 text-sm px-3 py-1.5 rounded font-medium transition-all">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d2/Broglie_Big.jpg/220px-Broglie_Big.jpg" class="scientist-img">
+                    <span>De Broglie</span>
+                </button>
+                <button onclick="window.app.setModel('schrodinger')" id="btn-schrodinger" class="flex items-center gap-2 text-sm px-3 py-1.5 rounded font-medium transition-all">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/2e/Erwin_Schr%C3%B6dinger_%281933%29.jpg/220px-Erwin_Schr%C3%B6dinger_%281933%29.jpg" class="scientist-img">
+                    <span>Schrödinger</span>
+                </button>
+            </div>
+            
+            <div class="hidden md:flex flex-col text-right">
+                <span class="text-xs text-gray-400 font-semibold">CONTROLS</span>
+                <span class="text-xs text-gray-500">Drag to Rotate • Scroll to Zoom</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex flex-1 w-full h-full relative">
+        
+        <!-- 3D Canvas Container -->
+        <div id="canvas-container" class="relative flex-grow bg-black">
+            <!-- Dynamic Label -->
+            <div id="viewLabel" class="absolute bottom-6 left-6 text-cyan-400 text-lg font-mono select-none pointer-events-none bg-gray-900/80 p-4 rounded-lg border border-cyan-500/50 backdrop-blur-md shadow-[0_0_20px_rgba(0,0,0,0.5)] max-w-md">
+                Initializing...
+            </div>
+        </div>
+
+        <!-- Right Sidebar: Energy Levels -->
+        <div class="w-24 sm:w-64 bg-gray-950 border-l border-gray-700 flex flex-col relative shrink-0 z-10 shadow-xl select-none">
+            <div class="p-3 text-center text-sm font-bold text-gray-300 border-b border-gray-700 bg-gray-900">
+                ENERGY LEVELS
+                <div class="text-[10px] text-gray-500 font-normal">Drag e⁻ to change level</div>
+            </div>
+            <div class="flex-1 relative w-full overflow-hidden cursor-pointer" id="energy-chart">
+                <!-- Moving Electron Indicator -->
+                <div id="electron-arrow" class="absolute w-full flex justify-center items-center transition-all duration-700 ease-out z-20 transform translate-y-[50%]">
+                    <div class="bg-gray-900 border-2 border-cyan-400 text-cyan-300 font-bold font-mono text-sm px-3 py-1 rounded-full shadow-[0_0_15px_rgba(6,182,212,0.6)] flex items-center gap-2 hover:bg-gray-800 transition-colors">
+                        <span>e⁻</span>
+                        <span id="electron-n-val" class="text-[10px] bg-cyan-900/50 px-1 rounded border border-cyan-500/30">n=1</span>
+                        <div class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Controls Footer -->
+    <div class="bg-gray-900 p-6 border-t border-gray-700 flex flex-wrap gap-6 justify-center items-center shrink-0 z-10 shadow-[0_-5px_20px_rgba(0,0,0,0.5)]">
+        
+        <!-- Controls Group -->
+        <div class="flex flex-col sm:flex-row gap-8 w-full max-w-5xl bg-gray-950 p-5 rounded-xl border border-gray-600 shadow-2xl">
+            
+            <!-- Energy Slider -->
+            <div class="flex-1 relative">
+                <div class="flex justify-between items-end mb-3">
+                    <div class="flex flex-col">
+                        <span class="text-gray-300 font-bold text-sm tracking-wide">PHOTON ENERGY</span>
+                        <span class="text-xs text-gray-500">Drag to find resonance</span>
+                    </div>
+                    <span id="energyDisplay" class="font-mono font-bold text-xl px-3 py-1 rounded bg-gray-900 border border-gray-700" style="color: #a855f7;">10.20 eV</span>
+                </div>
+                
+                <div class="relative w-full h-10 flex items-center group">
+                    <!-- Ticks for Magnetic Points -->
+                    <div id="slider-markers" class="absolute w-full h-full pointer-events-none z-0"></div>
+                    
+                    <input type="range" id="energySlider" min="1.50" max="13.60" step="0.01" value="10.20" class="relative z-10 w-full focus:outline-none">
+                </div>
+                
+                <div class="flex justify-between text-[11px] font-bold text-gray-500 mt-1 font-mono uppercase tracking-wider">
+                    <span>IR (Heat)</span><span>Visible Light</span><span>UV (Radiation)</span>
+                </div>
+                
+                <!-- Feedback Toast -->
+                <div id="snap-feedback" class="absolute -top-16 left-1/2 transform -translate-x-1/2 bg-cyan-900/90 text-white px-4 py-2 rounded-lg shadow-xl opacity-0 transition-all duration-300 border border-cyan-500/50 backdrop-blur-md min-w-[200px] text-center">
+                    <div id="snap-title" class="text-sm font-bold text-cyan-300">Resonance Found</div>
+                    <div id="snap-details" class="text-[10px] uppercase tracking-wider text-gray-300 mt-0.5">Transition Details</div>
+                </div>
+            </div>
+
+            <!-- Vertical Separator -->
+            <div class="w-px bg-gray-700 hidden sm:block"></div>
+
+            <!-- Intensity Slider -->
+            <div class="w-full sm:w-1/4">
+                <div class="flex justify-between items-end mb-3">
+                    <div class="flex flex-col">
+                        <span class="text-gray-300 font-bold text-sm tracking-wide">INTENSITY</span>
+                        <span class="text-xs text-gray-500">Photons per second</span>
+                    </div>
+                    <span id="intensityDisplay" class="font-mono text-gray-300 font-bold text-base">Paused</span>
+                </div>
+                <div class="relative w-full h-10 flex items-center">
+                    <input type="range" id="intensitySlider" min="0" max="100" step="1" value="0">
+                </div>
+            </div>
+        </div>
+        
+        <!-- Action Buttons -->
+        <div class="flex gap-4">
+            <button onclick="window.app.togglePause()" id="btn-pause" class="w-14 h-14 flex items-center justify-center bg-gray-800 hover:bg-gray-700 text-white rounded-full transition-all border-2 border-gray-600 hover:border-white shadow-lg group">
+                <svg id="icon-pause" class="w-6 h-6 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                <svg id="icon-play" class="w-6 h-6 hidden group-hover:scale-110 transition-transform pl-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            </button>
+            
+            <button onclick="window.app.resetAtom()" class="px-6 py-3 bg-gray-800 hover:bg-red-900/50 hover:text-red-200 hover:border-red-500 text-gray-300 rounded-lg text-sm font-bold transition-all border-2 border-gray-600 shadow-lg tracking-wide">
+                RESET ATOM
+            </button>
+        </div>
+    </div>
+
+    <!-- Application Logic -->
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- Physics Constants ---
+        const RYDBERG_EV = 13.6;
+        const MAX_N = 6;
+        const LEVELS = Array.from({length: MAX_N}, (_, i) => ({ n: i+1, E: -RYDBERG_EV / ((i+1)**2) }));
+        
+        // Define important transitions for magnetic snapping
+        const RESONANCE_POINTS = [
+            // Lyman Series (to n=1)
+            { ev: 10.20, label: "Lyman α (n=2→1)", series: "Lyman", region: "UV" },
+            { ev: 12.09, label: "Lyman β (n=3→1)", series: "Lyman", region: "UV" },
+            { ev: 12.75, label: "Lyman γ (n=4→1)", series: "Lyman", region: "UV" },
+            // Balmer Series (to n=2)
+            { ev: 1.89, label: "Balmer α (n=3→2)", series: "Balmer", region: "Visible (Red)" },
+            { ev: 2.55, label: "Balmer β (n=4→2)", series: "Balmer", region: "Visible (Cyan)" },
+            { ev: 2.86, label: "Balmer γ (n=5→2)", series: "Balmer", region: "Visible (Violet)" }
+        ];
+
+        // --- Utility Functions ---
+        function wavelengthFromEnergy(eV) { return 1240 / eV; }
+        
+        function colorFromWavelength(nm) {
+            let color = new THREE.Color();
+            if (nm < 380) color.setHex(0x9d4edd); // UV
+            else if (nm >= 380 && nm < 450) color.setHex(0x7b2cbf);
+            else if (nm >= 450 && nm < 495) color.setHex(0x3a0ca3);
+            else if (nm >= 495 && nm < 570) color.setHex(0x4cc9f0);
+            else if (nm >= 570 && nm < 590) color.setHex(0xf72585);
+            else if (nm >= 590 && nm < 620) color.setHex(0xf48c06);
+            else if (nm >= 620 && nm < 750) color.setHex(0xd00000);
+            else color.setHex(0x520a0a); // IR
+            return color;
+        }
+
+        // --- The 3D App Class ---
+        class SpectroscopyApp {
+            constructor() {
+                this.container = document.getElementById('canvas-container');
+                this.scene = new THREE.Scene();
+                this.scene.fog = new THREE.FogExp2(0x000000, 0.02);
+
+                this.camera = new THREE.PerspectiveCamera(60, this.container.clientWidth / this.container.clientHeight, 0.1, 1000);
+                this.camera.position.set(0, 5, 15);
+
+                this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+                this.renderer.setClearColor(0x000000);
+                this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+                this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                this.container.appendChild(this.renderer.domElement);
+
+                this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+                this.controls.enableDamping = true;
+                this.controls.dampingFactor = 0.05;
+
+                // State
+                this.state = {
+                    n: 1,
+                    l: 0, 
+                    viewMode: 'bohr', 
+                    sourceEnergy: 10.20,
+                    intensity: 0,
+                    photons: [],
+                    isPaused: false,
+                    isDraggingLevel: false,
+                    time: 0
+                };
+
+                // Assets
+                this.objects = {
+                    nucleus: null,
+                    bohrGroup: new THREE.Group(),
+                    schrodingerGroup: new THREE.Group(),
+                    deBroglieGroup: new THREE.Group(),
+                    electronSphere: null,
+                    orbitRings: [],
+                    photonSource: null,
+                    waveMesh: null
+                };
+
+                this.initScene();
+                this.setupUI();
+                this.renderUILevels();
+                
+                // Start Loop
+                this.lastTime = 0;
+                this.animate = this.animate.bind(this);
+                requestAnimationFrame(this.animate);
+                
+                document.getElementById('loading-overlay').style.opacity = 0;
+                setTimeout(() => document.getElementById('loading-overlay').remove(), 500);
+
+                window.addEventListener('resize', () => this.onResize());
+            }
+
+            initScene() {
+                const ambientLight = new THREE.AmbientLight(0x404040);
+                this.scene.add(ambientLight);
+                const pointLight = new THREE.PointLight(0xffffff, 1, 100);
+                pointLight.position.set(10, 10, 10);
+                this.scene.add(pointLight);
+
+                const nucleusGeo = new THREE.SphereGeometry(0.1, 32, 32);
+                const nucleusMat = new THREE.MeshStandardMaterial({ 
+                    color: 0xff0000, emissive: 0x550000, roughness: 0.2, metalness: 0.8
+                });
+                this.objects.nucleus = new THREE.Mesh(nucleusGeo, nucleusMat);
+                this.objects.nucleus.add(new THREE.PointLight(0xff0000, 1, 5));
+                this.scene.add(this.objects.nucleus);
+
+                this.createPhotonSource();
+                this.createBohrModel();
+                this.createDeBroglieModel();
+                
+                this.scene.add(this.objects.bohrGroup);
+                this.scene.add(this.objects.schrodingerGroup);
+                this.scene.add(this.objects.deBroglieGroup);
+                
+                this.objects.schrodingerGroup.visible = false;
+                this.objects.deBroglieGroup.visible = false;
+
+                const gridHelper = new THREE.GridHelper(30, 30, 0x222222, 0x050505);
+                gridHelper.position.y = -5;
+                this.scene.add(gridHelper);
+            }
+
+            createPhotonSource() {
+                const group = new THREE.Group();
+                group.position.set(-15, 0, 0);
+                group.lookAt(0,0,0);
+                
+                const bodyGeo = new THREE.CylinderGeometry(1.5, 2, 4, 8);
+                const bodyMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5, metalness: 0.8 });
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                body.rotation.x = Math.PI/2;
+                group.add(body);
+
+                const faceGeo = new THREE.CircleGeometry(1.2, 32);
+                const faceMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+                this.objects.sourceFace = new THREE.Mesh(faceGeo, faceMat);
+                this.objects.sourceFace.position.z = 2.01;
+                group.add(this.objects.sourceFace);
+                
+                this.objects.sourceLight = new THREE.PointLight(0x000000, 0, 10);
+                this.objects.sourceLight.position.z = 3;
+                group.add(this.objects.sourceLight);
+
+                this.scene.add(group);
+                this.objects.photonSource = group;
+            }
+
+            createBohrModel() {
+                const eGeo = new THREE.SphereGeometry(0.08, 16, 16);
+                const eMat = new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x0088aa });
+                this.objects.electronSphere = new THREE.Mesh(eGeo, eMat);
+                
+                const spriteMaterial = new THREE.SpriteMaterial({ 
+                    map: this.createGlowTexture(), color: 0x00ffff, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending 
+                });
+                const sprite = new THREE.Sprite(spriteMaterial);
+                sprite.scale.set(2.5, 2.5, 1.0);
+                this.objects.electronSphere.add(sprite);
+                this.objects.bohrGroup.add(this.objects.electronSphere);
+
+                for(let i=1; i<=MAX_N; i++) {
+                    const radius = i * 1.2; 
+                    const geometry = new THREE.TorusGeometry(radius, 0.02, 32, 100);
+                    const material = new THREE.MeshBasicMaterial({ color: 0x444444, transparent: true, opacity: 0.3 });
+                    const ring = new THREE.Mesh(geometry, material);
+                    ring.rotation.x = Math.PI / 2;
+                    this.objects.orbitRings.push(ring);
+                    this.objects.bohrGroup.add(ring);
+                }
+            }
+
+            createDeBroglieModel() {
+                const points = [];
+                for(let i=0; i<=100; i++) points.push(new THREE.Vector3(0,0,0));
+                const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                const material = new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 3 });
+                this.objects.waveMesh = new THREE.Line(geometry, material);
+                
+                const ringGeo = new THREE.TorusGeometry(1, 0.01, 16, 100);
+                const ringMat = new THREE.MeshBasicMaterial({ color: 0x666666, transparent: true, opacity: 0.5 });
+                this.objects.deBroglieRefRing = new THREE.Mesh(ringGeo, ringMat);
+                this.objects.deBroglieRefRing.rotation.x = Math.PI/2;
+
+                this.objects.deBroglieGroup.add(this.objects.waveMesh);
+                this.objects.deBroglieGroup.add(this.objects.deBroglieRefRing);
+            }
+
+            updateSchrodingerCloud(n, l) {
+                while(this.objects.schrodingerGroup.children.length > 0){ 
+                    this.objects.schrodingerGroup.remove(this.objects.schrodingerGroup.children[0]); 
+                }
+                const particleCount = 4000 * n; 
+                const geometry = new THREE.BufferGeometry();
+                const positions = [];
+                const colors = [];
+                const bounds = 8 * n; 
+
+                const getProb = (r, cosTheta) => {
+                    const rNorm = r / n;
+                    let rho = 0;
+                    if (l === 0) { // s
+                        if (n === 1) rho = Math.exp(-2 * rNorm);
+                        else if (n === 2) rho = Math.pow((2 - rNorm) * Math.exp(-rNorm/2), 2);
+                        else rho = Math.exp(-rNorm); 
+                    } 
+                    else if (l === 1) { // p
+                        rho = Math.pow(rNorm * Math.exp(-rNorm/2), 2) * Math.pow(cosTheta, 2);
+                    }
+                    else if (l === 2) { // d
+                        rho = Math.pow(rNorm, 2) * Math.exp(-rNorm) * (3 * Math.pow(cosTheta, 2) - 1)**2;
+                    }
+                    return rho;
+                };
+
+                let count = 0, attempts = 0;
+                while (count < particleCount && attempts < particleCount * 20) {
+                    attempts++;
+                    const x = (Math.random() - 0.5) * 2 * bounds;
+                    const y = (Math.random() - 0.5) * 2 * bounds;
+                    const z = (Math.random() - 0.5) * 2 * bounds;
+                    const r = Math.sqrt(x*x + y*y + z*z);
+                    if(r > bounds) continue;
+                    const cosTheta = y / r; 
+                    const prob = getProb(r, cosTheta);
+                    
+                    if (Math.random() < prob * 5.0) { 
+                        positions.push(x * 0.4, y * 0.4, z * 0.4); 
+                        const color = new THREE.Color();
+                        color.setHSL(0.5 + (prob * 0.2), 1.0, 0.3 + prob * 0.7);
+                        colors.push(color.r, color.g, color.b);
+                        count++;
+                    }
+                }
+                geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+                geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+                const material = new THREE.PointsMaterial({
+                    size: 0.15, vertexColors: true, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false
+                });
+                this.objects.schrodingerGroup.add(new THREE.Points(geometry, material));
+            }
+
+            createGlowTexture() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 32; canvas.height = 32;
+                const context = canvas.getContext('2d');
+                const gradient = context.createRadialGradient(16, 16, 0, 16, 16, 16);
+                gradient.addColorStop(0, 'rgba(255,255,255,1)');
+                gradient.addColorStop(0.2, 'rgba(0,255,255,1)');
+                gradient.addColorStop(0.5, 'rgba(0,0,64,0.5)');
+                gradient.addColorStop(1, 'rgba(0,0,0,0)');
+                context.fillStyle = gradient;
+                context.fillRect(0, 0, 32, 32);
+                return new THREE.CanvasTexture(canvas);
+            }
+
+            setModel(mode) {
+                this.state.viewMode = mode;
+                ['bohr', 'debroglie', 'schrodinger'].forEach(m => {
+                    const btn = document.getElementById(`btn-${m}`);
+                    if(m === mode) btn.className = "btn-active flex items-center gap-2 text-sm px-3 py-1.5 rounded font-medium transition-all";
+                    else btn.className = "btn-inactive flex items-center gap-2 text-sm px-3 py-1.5 rounded font-medium transition-all";
+                });
+                this.objects.bohrGroup.visible = (mode === 'bohr');
+                this.objects.deBroglieGroup.visible = (mode === 'debroglie');
+                this.objects.schrodingerGroup.visible = (mode === 'schrodinger');
+                if(mode === 'schrodinger') this.updateSchrodingerCloud(this.state.n, this.state.l);
+                else if (mode === 'debroglie') {
+                    const r = this.state.n * 1.2;
+                    this.objects.deBroglieRefRing.geometry.dispose();
+                    this.objects.deBroglieRefRing.geometry = new THREE.TorusGeometry(r, 0.02, 16, 100);
+                }
+                this.updateLabel();
+            }
+
+            setQuantumState(n) {
+                const oldN = this.state.n;
+                this.state.n = n;
+                this.state.l = Math.floor(Math.random() * n);
+                // Update the visible label in the round block
+                document.getElementById('electron-n-val').innerText = `n=${n}`;
+                this.updateUIChart();
+                this.updateLabel();
+                
+                // --- EMISSION LOGIC ---
+                // If electron fell (new n < old n), emit photon!
+                if(n < oldN) {
+                    const eHigh = LEVELS[oldN - 1].E;
+                    const eLow = LEVELS[n - 1].E;
+                    // Energy is negative, so high E (-3.4) > low E (-13.6)
+                    const energyDiff = eHigh - eLow;
+                    // Trigger emission effect
+                    this.emitPhoton(false, energyDiff); 
+                }
+
+                if(this.state.viewMode === 'schrodinger') this.updateSchrodingerCloud(this.state.n, this.state.l);
+                if(this.state.viewMode === 'debroglie') this.setModel('debroglie');
+            }
+
+            togglePause() {
+                this.state.isPaused = !this.state.isPaused;
+                const playIcon = document.getElementById('icon-play');
+                const pauseIcon = document.getElementById('icon-pause');
+                const btn = document.getElementById('btn-pause');
+                if(this.state.isPaused) {
+                    playIcon.classList.remove('hidden');
+                    pauseIcon.classList.add('hidden');
+                    btn.classList.replace('bg-gray-800', 'bg-green-700');
+                    btn.classList.add('animate-pulse');
+                    this.savedIntensity = this.state.intensity;
+                    this.state.intensity = 0;
+                    document.getElementById('intensityDisplay').innerText = "Paused";
+                } else {
+                    playIcon.classList.add('hidden');
+                    pauseIcon.classList.remove('hidden');
+                    btn.classList.replace('bg-green-700', 'bg-gray-800');
+                    btn.classList.remove('animate-pulse');
+                    this.state.intensity = this.savedIntensity || parseInt(document.getElementById('intensitySlider').value);
+                    if(this.state.intensity > 0) document.getElementById('intensityDisplay').innerText = this.state.intensity + "%";
+                }
+            }
+
+            emitPhoton(isSource, energyVal=0) {
+                if(this.state.isPaused) return;
+                const photon = {
+                    mesh: new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff })),
+                    velocity: new THREE.Vector3(),
+                    energy: energyVal,
+                    isSource: isSource,
+                    alive: true
+                };
+                
+                if (isSource) {
+                    photon.energy = this.state.sourceEnergy;
+                    const lambda = wavelengthFromEnergy(this.state.sourceEnergy);
+                    const color = colorFromWavelength(lambda);
+                    photon.mesh.material.color = color;
+                    photon.mesh.position.set(-15, (Math.random()-0.5)*1.5, (Math.random()-0.5)*1.5);
+                    photon.velocity.set(0.3, 0, 0); 
+                    const trail = new THREE.PointLight(color, 1, 3);
+                    photon.mesh.add(trail);
+                } else {
+                    // --- EMISSION EVENT ---
+                    const lambda = wavelengthFromEnergy(energyVal);
+                    const color = colorFromWavelength(lambda);
+                    photon.mesh.material.color = color;
+                    
+                    // Start near center (random position on small sphere)
+                    const theta = Math.random() * Math.PI * 2;
+                    const phi = Math.acos(2 * Math.random() - 1);
+                    const r = 0.5;
+                    photon.mesh.position.x = r * Math.sin(phi) * Math.cos(theta);
+                    photon.mesh.position.y = r * Math.sin(phi) * Math.sin(theta);
+                    photon.mesh.position.z = r * Math.cos(phi);
+                    
+                    // Fly outwards
+                    photon.velocity.copy(photon.mesh.position).normalize().multiplyScalar(0.2); // Speed
+                    
+                    const trail = new THREE.PointLight(color, 2, 5);
+                    photon.mesh.add(trail);
+                }
+                
+                this.scene.add(photon.mesh);
+                this.state.photons.push(photon);
+            }
+
+            checkAbsorption(photon) {
+                const currentE = LEVELS[this.state.n - 1].E;
+                for(let i = this.state.n; i < MAX_N; i++) {
+                    const nextE = LEVELS[i].E;
+                    const gap = nextE - currentE;
+                    if(Math.abs(photon.energy - gap) < 0.05) {
+                        this.setQuantumState(i + 1);
+                        const flash = new THREE.PointLight(0xffffff, 5, 10);
+                        this.scene.add(flash);
+                        setTimeout(()=>this.scene.remove(flash), 100);
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            updateDeBroglieWave(time) {
+                if(!this.objects.deBroglieGroup.visible) return;
+                const n = this.state.n;
+                const r = n * 1.2;
+                const amplitude = 0.5;
+                const points = [];
+                const segments = 200;
+                for(let i=0; i<=segments; i++) {
+                    const theta = (i / segments) * Math.PI * 2;
+                    const rCurrent = r + amplitude * Math.sin(n * theta) * Math.cos(time * 3);
+                    points.push(new THREE.Vector3(rCurrent * Math.cos(theta), 0, rCurrent * Math.sin(theta)));
+                }
+                this.objects.waveMesh.geometry.setFromPoints(points);
+                this.objects.waveMesh.rotation.x = Math.PI / 2;
+            }
+
+            animate(timeMS) {
+                requestAnimationFrame(this.animate);
+                const dt = (timeMS - this.lastTime) / 1000;
+                this.lastTime = timeMS;
+                
+                if(this.state.isPaused) {
+                    this.controls.update();
+                    this.renderer.render(this.scene, this.camera);
+                    return;
+                }
+                this.state.time += dt;
+                this.controls.update();
+
+                if(this.state.viewMode === 'bohr') {
+                    const r = this.state.n * 1.2;
+                    const speed = 0.002 * (MAX_N - this.state.n + 1);
+                    const angle = timeMS * speed;
+                    this.objects.electronSphere.position.x = Math.cos(angle) * r;
+                    this.objects.electronSphere.position.z = Math.sin(angle) * r;
+                    this.objects.orbitRings.forEach((ring, i) => {
+                        const isActive = (i === this.state.n - 1);
+                        ring.material.color.setHex(isActive ? 0x00ffff : 0x444444);
+                        ring.material.opacity = isActive ? 0.8 : 0.3;
+                    });
+                } else if (this.state.viewMode === 'debroglie') {
+                    this.updateDeBroglieWave(this.state.time);
+                } else {
+                    this.objects.schrodingerGroup.rotation.y += 0.001;
+                }
+
+                if(this.state.intensity > 0) {
+                    const lambda = wavelengthFromEnergy(this.state.sourceEnergy);
+                    const color = colorFromWavelength(lambda);
+                    this.objects.sourceFace.material.color = color;
+                    this.objects.sourceLight.color = color;
+                    this.objects.sourceLight.intensity = this.state.intensity / 20;
+                    if(Math.random() * 100 < this.state.intensity / 10) this.emitPhoton(true);
+                } else {
+                    this.objects.sourceFace.material.color.setHex(0x000000);
+                    this.objects.sourceLight.intensity = 0;
+                }
+
+                for(let i = this.state.photons.length - 1; i >= 0; i--) {
+                    const p = this.state.photons[i];
+                    p.mesh.position.add(p.velocity);
+                    if(p.isSource && p.mesh.position.distanceTo(new THREE.Vector3(0,0,0)) < 1.0) {
+                        if(this.checkAbsorption(p)) {
+                            this.scene.remove(p.mesh);
+                            this.state.photons.splice(i, 1);
+                            continue;
+                        }
+                    }
+                    if(p.mesh.position.length() > 25) {
+                        this.scene.remove(p.mesh);
+                        this.state.photons.splice(i, 1);
+                    }
+                }
+
+                // Random decay
+                if(this.state.n > 1 && Math.random() < 0.01) { // Increased prob slightly for demo
+                    const targetN = Math.floor(Math.random() * (this.state.n - 1)) + 1;
+                    this.setQuantumState(targetN);
+                }
+                this.renderer.render(this.scene, this.camera);
+            }
+
+            resetAtom() {
+                this.setQuantumState(1);
+            }
+
+            setupUI() {
+                const eSlider = document.getElementById('energySlider');
+                const iSlider = document.getElementById('intensitySlider');
+                const feedback = document.getElementById('snap-feedback');
+                const title = document.getElementById('snap-title');
+                const details = document.getElementById('snap-details');
+                const chart = document.getElementById('energy-chart');
+                const arrow = document.getElementById('electron-arrow');
+
+                // --- Drag and Snap Logic ---
+                const handleDragStart = (e) => {
+                    this.state.isDraggingLevel = true;
+                    arrow.style.transition = 'none';
+                    arrow.style.cursor = 'grabbing';
+                };
+                const handleDragMove = (e) => {
+                    if (!this.state.isDraggingLevel) return;
+                    e.preventDefault();
+                    
+                    const rect = chart.getBoundingClientRect();
+                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                    const y = rect.bottom - clientY;
+                    let pct = (y / rect.height) * 100;
+                    pct = Math.max(10, Math.min(90, pct)); // clamp
+                    
+                    arrow.style.bottom = `${pct}%`;
+                    
+                    // Visual feedback for nearest level
+                    const nearestN = Math.round(((pct - 10) / 80) * MAX_N);
+                    // (Optional) highlight level visual logic here
+                };
+                const handleDragEnd = (e) => {
+                    if (!this.state.isDraggingLevel) return;
+                    this.state.isDraggingLevel = false;
+                    arrow.style.transition = 'all 0.7s ease-out';
+                    arrow.style.cursor = 'grab';
+                    
+                    // Calculate drop target
+                    const currentBottom = parseFloat(arrow.style.bottom);
+                    
+                    let bestN = 1;
+                    let minDiff = 999;
+                    
+                    LEVELS.forEach(l => {
+                        const targetPct = ((l.E + 13.6) / 13.6) * 80 + 10;
+                        const diff = Math.abs(currentBottom - targetPct);
+                        if(diff < minDiff) {
+                            minDiff = diff;
+                            bestN = l.n;
+                        }
+                    });
+                    
+                    this.setQuantumState(bestN);
+                };
+
+                arrow.addEventListener('mousedown', handleDragStart);
+                arrow.addEventListener('touchstart', handleDragStart);
+                
+                window.addEventListener('mousemove', handleDragMove);
+                window.addEventListener('touchmove', handleDragMove);
+                
+                window.addEventListener('mouseup', handleDragEnd);
+                window.addEventListener('touchend', handleDragEnd);
+
+
+                // --- Energy Slider Magnetic Logic ---
+                eSlider.addEventListener('input', (e) => {
+                    let val = parseFloat(e.target.value);
+                    let snapped = false;
+                    let snapData = null;
+                    const THRESHOLD = 0.15;
+                    const closest = RESONANCE_POINTS.find(p => Math.abs(p.ev - val) < THRESHOLD);
+                    
+                    if(closest) {
+                        val = closest.ev;
+                        e.target.value = val; 
+                        snapped = true;
+                        snapData = closest;
+                        e.target.classList.add('snapped');
+                    } else {
+                        e.target.classList.remove('snapped');
+                    }
+                    
+                    this.state.sourceEnergy = val;
+                    const lambda = wavelengthFromEnergy(this.state.sourceEnergy);
+                    const hex = '#' + colorFromWavelength(lambda).getHexString();
+                    const disp = document.getElementById('energyDisplay');
+                    disp.innerText = this.state.sourceEnergy.toFixed(2) + " eV";
+                    disp.style.color = hex;
+                    disp.style.borderColor = snapped ? hex : '#374151';
+                    
+                    if(snapped) {
+                        title.innerText = snapData.label;
+                        title.style.color = hex;
+                        details.innerText = `Series: ${snapData.series} • ${snapData.region}`;
+                        feedback.style.borderColor = hex;
+                        feedback.style.opacity = 1;
+                        document.querySelectorAll('.slider-tick').forEach(tick => {
+                            if(tick.dataset.ev == val.toString()) tick.classList.add('active');
+                            else tick.classList.remove('active');
+                        });
+                    } else {
+                        feedback.style.opacity = 0;
+                        document.querySelectorAll('.slider-tick').forEach(t => t.classList.remove('active'));
+                    }
+                });
+
+                iSlider.addEventListener('input', (e) => {
+                    this.state.intensity = parseInt(e.target.value);
+                    if(!this.state.isPaused) document.getElementById('intensityDisplay').innerText = this.state.intensity > 0 ? this.state.intensity + "%" : "Off";
+                });
+
+                const markerContainer = document.getElementById('slider-markers');
+                RESONANCE_POINTS.forEach(t => {
+                    const pct = ((t.ev - 1.5) / (13.6 - 1.5)) * 100;
+                    const tick = document.createElement('div');
+                    tick.className = 'slider-tick';
+                    // Accurate alignment calculation:
+                    // Center of thumb is at: (pct/100) * (trackWidth - thumbWidth) + (thumbWidth/2)
+                    // Thumb width = 24px.
+                    // Center in pixels relative to track start: (pct/100) * (W - 24) + 12
+                    // Tick left position needs to be Center - (tickWidth/2).
+                    // Tick width = 3px.
+                    // Left = (pct/100)*(W-24) + 12 - 1.5
+                    // Left = (pct/100)*W - (pct/100)*24 + 10.5
+                    // Left = pct% - (pct/100)*24px + 10.5px
+                    tick.style.left = `calc(${pct}% + (11px - 24px * ${pct / 100}))`;
+                    
+                    tick.setAttribute('data-label', `${t.label} (${t.ev}eV)`);
+                    tick.setAttribute('data-ev', t.ev);
+                    markerContainer.appendChild(tick);
+                });
+            }
+
+            renderUILevels() {
+                const chart = document.getElementById('energy-chart');
+                LEVELS.forEach(l => {
+                    const el = document.createElement('div');
+                    el.className = 'absolute w-full border-t border-gray-600 group hover:border-white transition-colors cursor-pointer';
+                    const pct = ((l.E + 13.6) / 13.6) * 80 + 10;
+                    el.style.bottom = `${pct}%`;
+                    el.title = `n=${l.n} (${l.E.toFixed(2)} eV)`;
+                    // Click to snap
+                    el.addEventListener('click', () => { if(!this.state.isDraggingLevel) this.setQuantumState(l.n); });
+                    
+                    const label = document.createElement('div');
+                    label.className = 'text-[10px] text-gray-500 ml-1 -mt-3 font-mono group-hover:text-white pointer-events-none';
+                    label.innerText = `n=${l.n}`;
+                    el.appendChild(label);
+                    chart.appendChild(el);
+                });
+            }
+
+            updateUIChart() {
+                // If dragging, don't auto-update position
+                if (this.state.isDraggingLevel) return;
+                
+                const arrow = document.getElementById('electron-arrow');
+                const energy = LEVELS[this.state.n - 1].E;
+                const pct = ((energy + 13.6) / 13.6) * 80 + 10;
+                arrow.style.bottom = `${pct}%`;
+            }
+
+            updateLabel() {
+                const lbl = document.getElementById('viewLabel');
+                const n = this.state.n;
+                if(this.state.viewMode === 'bohr') lbl.innerHTML = `Bohr Model<br><span class="text-sm text-gray-400">Electron in n=${n} planetary orbit</span>`;
+                else if(this.state.viewMode === 'debroglie') lbl.innerHTML = `De Broglie<br><span class="text-sm text-gray-400">Standing wave: 2πr = ${n}λ</span>`;
+                else {
+                    const subshells = ['s', 'p', 'd', 'f'];
+                    const sub = subshells[this.state.l] || '';
+                    lbl.innerHTML = `Schrödinger Cloud<br><span class="text-sm text-gray-400">${n}${sub} Orbital Probability Density</span>`;
+                }
+            }
+            
+            onResize() {
+                this.camera.aspect = this.container.clientWidth / this.container.clientHeight;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+            }
+        }
+
+        window.app = new SpectroscopyApp();
+
+    </script>
+</body>
+</html>
