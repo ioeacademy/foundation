@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Entanglr: 2-Qubit Logic & Tensor Products</title>
+    <!-- MathJax Configuration -->
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            options: {
+                enableMenu: false
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg: #0f172a;
+            --panel: #1e293b;
+            --accent: #38bdf8;
+            --accent2: #f472b6;
+            --accent3: #c084fc;
+            --text: #e2e8f0;
+            --border: rgba(255,255,255,0.1);
+            --chalk: #f8fafc;
+            --subcard-bg: rgba(0, 0, 0, 0.25);
+        }
+
+        body {
+            margin: 0; padding: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            height: 100vh;
+            display: grid;
+            grid-template-rows: 60px 1fr;
+            grid-template-columns: 280px 1fr; /* Reduced sidebar width */
+            overflow: hidden;
+        }
+
+        header {
+            grid-column: 1 / -1;
+            background: rgba(15, 23, 42, 0.95);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            gap: 15px;
+            z-index: 10;
+        }
+        h1 { font-family: 'Caveat', cursive; font-size: 2.2rem; margin: 0; color: var(--accent); }
+        .subtitle { font-size: 0.85rem; opacity: 0.6; font-family: 'JetBrains Mono', monospace; }
+
+        #sidebar {
+            background: var(--panel);
+            border-right: 1px solid var(--border);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+            overflow-y: auto;
+        }
+
+        .palette-section h3 {
+            margin: 0 0 15px 0;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: #94a3b8;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 5px;
+        }
+
+        /* DRAGGABLE PALETTE */
+        .gate-palette {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr); /* 2 cols */
+            gap: 15px;
+        }
+
+        .palette-item {
+            width: 100%;
+            aspect-ratio: 1;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: grab;
+            transition: all 0.2s;
+            user-select: none;
+        }
+        .palette-item:hover {
+            background: rgba(255,255,255,0.1);
+            border-color: var(--accent);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        .palette-item:active { cursor: grabbing; }
+
+        .gate-icon {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 800;
+            font-size: 1.5rem;
+            color: var(--text);
+        }
+        .gate-name {
+            font-size: 0.7rem;
+            margin-top: 5px;
+            color: #94a3b8;
+            font-weight: 600;
+        }
+
+        /* Color Coding Palette */
+        .p-x { color: var(--accent); }
+        .p-h { color: var(--accent2); }
+        .p-z { color: var(--green, #4ade80); }
+        .p-cnot { color: var(--accent3); }
+
+        .reset-btn {
+            width: 100%;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: auto;
+            transition: all 0.2s;
+        }
+        .reset-btn:hover { background: rgba(239, 68, 68, 0.2); }
+
+        #main-view {
+            display: flex;
+            flex-direction: column;
+            background: radial-gradient(circle at top right, #1e293b 0%, #0f172a 100%);
+            overflow: hidden;
+            position: relative;
+        }
+
+        #circuit-container {
+            min-height: 200px;
+            background: rgba(0,0,0,0.3);
+            border-bottom: 1px solid var(--border);
+            padding: 25px 40px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 60px;
+            overflow-x: auto;
+            flex-shrink: 0;
+            position: relative;
+        }
+
+        /* Drag Hint Overlay */
+        #drag-hint {
+            position: absolute;
+            top: 10px; right: 20px;
+            font-size: 0.8rem;
+            color: rgba(255,255,255,0.3);
+            pointer-events: none;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .wire-row { 
+            display: flex; 
+            align-items: center; 
+            position: relative; 
+            min-width: 100%; 
+            height: 60px; 
+            transition: background 0.2s;
+            border-radius: 8px;
+            padding-right: 40px; /* Space for scroll */
+        }
+        
+        /* Drop Target Styling */
+        .wire-row.drag-over {
+            background: rgba(56, 189, 248, 0.1);
+            box-shadow: inset 0 0 0 2px rgba(56, 189, 248, 0.3);
+        }
+
+        .wire-label { 
+            font-family: 'JetBrains Mono', monospace; 
+            font-weight: bold; 
+            width: 80px;  /* Increased width for |0> label */
+            z-index: 2; 
+            flex-shrink: 0;
+            font-size: 1.2rem;
+            padding-left: 10px;
+            display: flex;
+            gap: 8px;
+        }
+        .wire-line { 
+            position: absolute; 
+            left: 80px; /* Updated for label width */
+            right: 0; 
+            top: 50%; 
+            height: 2px; 
+            background: #475569; 
+            z-index: 0; 
+        }
+        
+        .gates-container { 
+            display: flex; 
+            align-items: center; 
+            gap: 30px; 
+            margin-left: 20px; 
+            z-index: 1; 
+            height: 100%; 
+            padding-left: 10px;
+        }
+
+        .gate-box {
+            width: 44px; height: 44px;
+            background: var(--panel);
+            border: 2px solid var(--accent);
+            border-radius: 6px;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 800; font-family: 'JetBrains Mono', monospace;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+            flex-shrink: 0;
+            position: relative;
+            user-select: none;
+        }
+
+        /* Classical CNOT Styling */
+        .gate-box.cnot-ctrl { font-size: 1.2rem; color: var(--accent3); background: transparent; border-color: transparent; box-shadow: none; }
+        .gate-box.cnot-tgt { font-size: 2.4rem; color: var(--accent3); background: transparent; border-color: transparent; box-shadow: none; }
+        
+        .cnot-line-down::after { content: ''; position: absolute; top: 50%; left: 50%; width: 2px; height: 104px; background: var(--accent3); z-index: -1; transform: translateX(-50%); }
+        .cnot-line-up::after { content: ''; position: absolute; bottom: 50%; left: 50%; width: 2px; height: 104px; background: var(--accent3); z-index: -1; transform: translateX(-50%); }
+
+        #blackboard {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 40px;
+            background-image: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.02) 0%, transparent 80%);
+            scroll-behavior: smooth;
+        }
+
+        .calc-card {
+            background: rgba(255,255,255,0.02);
+            border-left: 5px solid var(--accent);
+            padding: 25px;
+            margin-bottom: 60px;
+            border-radius: 0 12px 12px 0;
+            font-family: 'Caveat', cursive;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+            animation: slideIn 0.4s ease-out;
+            position: relative;
+        }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+
+        .sub-card {
+            background: var(--subcard-bg);
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .sub-card-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--accent);
+            margin-bottom: 15px;
+            opacity: 0.8;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .sub-card-title::after { content: ''; flex-grow: 1; height: 1px; background: rgba(255,255,255,0.1); }
+
+        .bell-badge {
+            position: absolute;
+            top: -15px; right: 20px;
+            background: var(--accent3);
+            color: white;
+            padding: 6px 18px;
+            border-radius: 20px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            font-weight: bold;
+            box-shadow: 0 8px 20px rgba(192, 132, 252, 0.5);
+            z-index: 100;
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes popIn { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+        .step-header { font-size: 1.8rem; color: var(--accent); margin-bottom: 15px; font-weight: 700; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px; }
+        
+        .algebra-line {
+            font-size: 1.6rem;
+            margin: 10px 0;
+            color: var(--chalk);
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+            line-height: 1.8;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .derivation-block { margin-bottom: 25px; }
+
+        .property-label {
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 0.95rem;
+            color: #94a3b8;
+            background: rgba(56, 189, 248, 0.08);
+            padding: 6px 14px;
+            border-radius: 4px;
+            display: inline-block;
+            margin-bottom: 8px;
+            border-left: 2px solid var(--accent);
+            line-height: 1.4;
+        }
+
+        #prob-footer {
+            height: 200px;
+            background: #020617;
+            border-bottom: 1px solid var(--border); /* Swapped position means we need separation below */
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 15px 0;
+            flex-shrink: 0;
+            gap: 15px;
+        }
+
+        #global-status {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1rem;
+            font-weight: bold;
+            color: #475569;
+            padding: 8px 24px;
+            border-radius: 30px;
+            border: 1px solid transparent;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        #global-status.bell-active {
+            color: var(--accent3);
+            background: rgba(192, 132, 252, 0.1);
+            border-color: var(--accent3);
+            box-shadow: 0 0 20px rgba(192, 132, 252, 0.2);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+
+        .bars-row { display: flex; gap: 30px; align-items: flex-end; }
+        .prob-bar-group { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 80px; }
+        .bar-container { width: 50px; height: 80px; background: rgba(255,255,255,0.05); border-radius: 6px; position: relative; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }
+        .bar-fill { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(to top, var(--accent), var(--accent3)); transition: height 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        .state-label { font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; font-weight: bold; color: #94a3b8; }
+        .prob-val { font-size: 0.75rem; color: var(--accent); font-family: 'JetBrains Mono', monospace; }
+
+        mjx-container { color: var(--chalk) !important; font-family: 'Caveat', cursive !important; }
+        .math-block { margin: 15px 0; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+        .matrix-sum-block { font-size: 1.1rem; color: #cbd5e1; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; border: 1px dashed rgba(255,255,255,0.1); width: fit-content; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Entanglr</h1>
+        <div class="subtitle">System Logic & Dual-Method Calculus</div>
+    </header>
+
+    <div id="sidebar">
+        <div class="palette-section">
+            <h3>Gate Library</h3>
+            <div class="gate-palette">
+                <div class="palette-item" draggable="true" data-type="H">
+                    <span class="gate-icon p-h">H</span>
+                    <span class="gate-name">Hadamard</span>
+                </div>
+                <div class="palette-item" draggable="true" data-type="X">
+                    <span class="gate-icon p-x">X</span>
+                    <span class="gate-name">Pauli-X</span>
+                </div>
+                <div class="palette-item" draggable="true" data-type="Z">
+                    <span class="gate-icon p-z">Z</span>
+                    <span class="gate-name">Pauli-Z</span>
+                </div>
+                <div class="palette-item" draggable="true" data-type="CNOT">
+                    <span class="gate-icon p-cnot">⊕</span>
+                    <span class="gate-name">CNOT</span>
+                </div>
+            </div>
+        </div>
+
+        <button class="reset-btn" onclick="sim.reset()">Clear Circuit (Enter)</button>
+    </div>
+
+    <div id="main-view">
+        <div id="circuit-container">
+            <div id="drag-hint">Drag gates onto wires</div>
+            
+            <div class="wire-row" id="wire-0" data-wire="0">
+                <div class="wire-label" style="color:var(--accent)">Q1 <span style="opacity:0.5">|0⟩</span></div>
+                <div class="wire-line"></div>
+                <div class="gates-container" id="gates-0"></div>
+            </div>
+            
+            <div class="wire-row" id="wire-1" data-wire="1">
+                <div class="wire-label" style="color:var(--accent2)">Q2 <span style="opacity:0.5">|0⟩</span></div>
+                <div class="wire-line"></div>
+                <div class="gates-container" id="gates-1"></div>
+            </div>
+        </div>
+
+        <!-- REORDERED: Status Panel is now under circuit -->
+        <div id="prob-footer">
+            <div id="global-status">System Status: Product State</div>
+            <div class="bars-row">
+                <div class="prob-bar-group">
+                    <span class="prob-val" id="pval-00">100%</span>
+                    <div class="bar-container"><div class="bar-fill" id="bar-00" style="height: 100%"></div></div>
+                    <span class="state-label">|00⟩</span>
+                </div>
+                <div class="prob-bar-group">
+                    <span class="prob-val" id="pval-01">0%</span>
+                    <div class="bar-container"><div class="bar-fill" id="bar-01" style="height: 0%"></div></div>
+                    <span class="state-label">|01⟩</span>
+                </div>
+                <div class="prob-bar-group">
+                    <span class="prob-val" id="pval-10">0%</span>
+                    <div class="bar-container"><div class="bar-fill" id="bar-10" style="height: 0%"></div></div>
+                    <span class="state-label">|10⟩</span>
+                </div>
+                <div class="prob-bar-group">
+                    <span class="prob-val" id="pval-11">0%</span>
+                    <div class="bar-container"><div class="bar-fill" id="bar-11" style="height: 0%"></div></div>
+                    <span class="state-label">|11⟩</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="blackboard"></div>
+    </div>
+
+<script>
+class Complex {
+    constructor(re, im = 0) { this.re = re; this.im = im; }
+    add(c) { return new Complex(this.re + c.re, this.im + c.im); }
+    mul(c) {
+        if(c instanceof Complex) return new Complex(this.re*c.re - this.im*c.im, this.re*c.im + this.im*c.re);
+        return new Complex(this.re * c, this.im * c);
+    }
+    magSq() { return this.re*this.re + this.im*this.im; }
+    toLatex(round = true) {
+        let r = round ? Math.round(this.re * 1000) / 1000 : this.re;
+        let i = round ? Math.round(this.im * 1000) / 1000 : this.im;
+        if (Math.abs(r) < 0.001 && Math.abs(i) < 0.001) return "0";
+        if (Math.abs(i) < 0.001) {
+            if (Math.abs(Math.abs(r) - 0.707) < 0.01) return (r > 0 ? "" : "-") + "\\frac{1}{\\sqrt{2}}";
+            return r.toString();
+        }
+        return `(${r} ${i >= 0 ? '+' : '-'} ${Math.abs(i)}i)`;
+    }
+}
+
+const GATES = {
+    I: [[new Complex(1), new Complex(0)], [new Complex(0), new Complex(1)]],
+    X: [[new Complex(0), new Complex(1)], [new Complex(1), new Complex(0)]],
+    Z: [[new Complex(1), new Complex(0)], [new Complex(0), new Complex(-1)]],
+    H: [[new Complex(0.7071), new Complex(0.7071)], [new Complex(0.7071), new Complex(-0.7071)]]
+};
+
+class Simulator {
+    constructor() {
+        this.reset();
+    }
+
+    reset() {
+        this.state = [new Complex(1), new Complex(0), new Complex(0), new Complex(0)];
+        document.getElementById('blackboard').innerHTML = '';
+        document.getElementById('gates-0').innerHTML = '';
+        document.getElementById('gates-1').innerHTML = '';
+        this.addInitialCard();
+        this.updateUI();
+    }
+
+    addInitialCard() {
+        this.logStep({
+            title: "System Initialization",
+            desc: "The composite Hilbert space begins in the computational ground state.",
+            latex: "\\[ |\\psi_0\\rangle = |0\\rangle \\otimes |0\\rangle = |00\\rangle = \\begin{bmatrix} 1 \\\\ 0 \\\\ 0 \\\\ 0 \\end{bmatrix} \\]"
+        });
+    }
+
+    applyGate(name, qubit) {
+        let m1 = qubit === 0 ? GATES[name] : GATES.I;
+        let m2 = qubit === 1 ? GATES[name] : GATES.I;
+        const bigMatrix = this.tensorProduct(m1, m2);
+        const oldState = [...this.state];
+        this.state = this.matMulVec(bigMatrix, this.state);
+        this.logStep({
+            title: `Operation: ${name} on Q${qubit+1}`,
+            desc: `Applying operation via dual mathematical approaches.`,
+            type: name, qubit: qubit, isTensor: true, m1: m1, m2: m2, opStr: qubit === 0 ? `${name} \\otimes I` : `I \\otimes ${name}`,
+            matrix: this.matToLatex(bigMatrix), oldState: oldState, fullMatrix: bigMatrix,
+            algebra: this.getAlgebraicDerivation(name, qubit, oldState, this.state),
+            result: this.vecToLatex(this.state)
+        });
+        this.addGateToUI(name, qubit);
+        this.updateUI();
+    }
+
+    applyCNOT(ctrl, tgt) {
+        const matrix = ctrl === 0 ? this.getCNOT01() : this.getCNOT10();
+        const oldState = [...this.state];
+        this.state = this.matMulVec(matrix, this.state);
+        this.logStep({
+            title: `CNOT (Ctrl: Q${ctrl+1}, Tgt: Q${tgt+1})`,
+            desc: "Entangling operation derived through matrix and symbolic methods.",
+            type: 'CNOT', matrix: this.matToLatex(matrix), oldState: oldState, fullMatrix: matrix,
+            algebra: this.getCNOTAlgebra(ctrl, tgt, oldState, this.state),
+            result: this.vecToLatex(this.state)
+        });
+        this.addCNOTToUI(ctrl, tgt);
+        this.updateUI();
+    }
+
+    tensorProduct(a, b) {
+        let res = [];
+        for(let r=0; r<4; r++) {
+            res[r] = [];
+            for(let c=0; c<4; c++) res[r][c] = a[Math.floor(r/2)][Math.floor(c/2)].mul(b[r%2][c%2]);
+        }
+        return res;
+    }
+
+    matMulVec(mat, vec) {
+        return mat.map(row => row.reduce((acc, val, i) => acc.add(val.mul(vec[i])), new Complex(0)));
+    }
+
+    logStep(data) {
+        const board = document.getElementById('blackboard');
+        const card = document.createElement('div');
+        card.className = 'calc-card';
+        if (data.qubit === 0) card.style.borderLeftColor = 'var(--accent)';
+        if (data.qubit === 1) card.style.borderLeftColor = 'var(--accent2)';
+        if (data.type === 'CNOT') card.style.borderLeftColor = 'var(--accent3)';
+
+        const bellName = this.detectBellState(this.state);
+        let badgeHtml = bellName ? `<div class="bell-badge">Bell State: ${bellName}</div>` : "";
+        let mainHtml = `<div class="step-header">${data.title}</div><div style="font-family:sans-serif; color:#94a3b8; margin-bottom:15px">${data.desc}</div>`;
+        
+        let matrixSubCard = `<div class="sub-card"><div class="sub-card-title">Method A: Linear Algebra (Matrix)</div>`;
+        if (data.isTensor) {
+            matrixSubCard += `<div class="math-block">\\[ M = ${data.opStr} = ${this.matToLatex(data.m1)} \\otimes ${this.matToLatex(data.m2)} \\]
+            \\[ \\text{Block Map:} \\quad ${this.getBlockMatrixLatex(data.m1, data.m2)} \\]
+            \\[ M_{4\\times 4} = ${data.matrix} \\]</div>`;
+        } else if (data.matrix) matrixSubCard += `<div class="math-block">\\[ M = ${data.matrix} \\]</div>`;
+
+        if (data.fullMatrix && data.oldState) {
+            matrixSubCard += `<div class="math-block">\\[ M |\\psi\\rangle = ${data.matrix} ${this.vecToLatex(data.oldState)} \\]
+            <div class="matrix-sum-block">\\[ = ${this.getMatMulExpansionLatex(data.fullMatrix, data.oldState)} \\]</div>\\[ = ${data.result} \\]</div>`;
+        }
+        if (data.latex) matrixSubCard += data.latex;
+        matrixSubCard += `</div>`; 
+
+        let algebraicSubCard = data.algebra ? `<div class="sub-card" style="border-left: 2px solid rgba(56, 189, 248, 0.4)">
+            <div class="sub-card-title">Method B: Dirac Calculus (Symbolic)</div><div class="algebra-line">${data.algebra}</div></div>` : "";
+
+        card.innerHTML = badgeHtml + mainHtml + matrixSubCard + algebraicSubCard;
+        board.appendChild(card);
+        setTimeout(() => board.scrollTop = board.scrollHeight, 100);
+        if (typeof MathJax !== 'undefined' && MathJax.typesetPromise) MathJax.typesetPromise([card]);
+    }
+
+    detectBellState(vec) {
+        const eps = 0.05;
+        const isHalf = (val) => Math.abs(val - 0.5) < eps;
+        const isZero = (val) => Math.abs(val) < eps;
+
+        const p = vec.map(v => v.magSq());
+
+        if (isHalf(p[0]) && isHalf(p[3]) && isZero(p[1]) && isZero(p[2])) {
+            const relPhase = vec[0].mul(new Complex(vec[3].re, -vec[3].im));
+            return relPhase.re < -0.1 ? "Φ⁻" : "Φ⁺";
+        }
+        if (isHalf(p[1]) && isHalf(p[2]) && isZero(p[0]) && isZero(p[3])) {
+            const relPhase = vec[1].mul(new Complex(vec[2].re, -vec[2].im));
+            return relPhase.re < -0.1 ? "Ψ⁻ (Singlet State)" : "Ψ⁺";
+        }
+        return null;
+    }
+
+    getBlockMatrixLatex(a, b) {
+        const bMat = `\\begin{bmatrix} b_{00} & b_{01} \\\\ b_{10} & b_{11} \\end{bmatrix}`;
+        return `\\begin{bmatrix} ${a[0][0].toLatex()}${bMat} & ${a[0][1].toLatex()}${bMat} \\\\ ${a[1][0].toLatex()}${bMat} & ${a[1][1].toLatex()}${bMat} \\end{bmatrix}`;
+    }
+
+    getMatMulExpansionLatex(mat, vec) {
+        let lines = [];
+        for (let r = 0; r < 4; r++) {
+            let rowTerms = [];
+            for (let c = 0; c < 4; c++) rowTerms.push(`(${mat[r][c].toLatex()})(${vec[c].toLatex()})`);
+            lines.push(rowTerms.join(" + "));
+        }
+        return `\\begin{bmatrix} ${lines.join(" \\\\ ")} \\end{bmatrix}`;
+    }
+
+    vecToDirac(vec) {
+        let terms = [];
+        const basis = ["00", "01", "10", "11"];
+        vec.forEach((amp, i) => {
+            if (amp.magSq() > 0.001) {
+                let coeff = amp.toLatex(), sign = "";
+                if (terms.length > 0) {
+                   if (coeff.startsWith("-")) { coeff = coeff.substring(1); sign = " - "; }
+                   else sign = " + ";
+                } else if (coeff.startsWith("-")) { sign = "-"; coeff = coeff.substring(1); }
+                if (coeff === "1") coeff = "";
+                terms.push(`${sign}${coeff}|${basis[i]}\\rangle`);
+            }
+        });
+        return terms.length === 0 ? "0" : terms.join("");
+    }
+
+    getAlgebraicDerivation(gate, qubit, startVec, endVec) {
+        const startKet = this.vecToDirac(startVec), endKet = this.vecToDirac(endVec);
+        const op = qubit === 0 ? `(${gate} \\otimes I)` : `(I \\otimes ${gate})`;
+        const opAction = startVec.filter(v => v.magSq() > 0.001).length > 1 ? `${op}(${startKet})` : `${op}${startKet}`;
+        const basisKets = [["0","0"], ["0","1"], ["1","0"], ["1","1"]];
+        let startExpanded = [], operatorSeparation = [], localActionList = [];
+
+        startVec.forEach((amp, i) => {
+            if (amp.magSq() > 0.001) {
+                let c = amp.toLatex(), coeff = (c === "1") ? "" : (c === "-1" ? "-" : c);
+                const q1 = basisKets[i][0], q2 = basisKets[i][1];
+                startExpanded.push(`${coeff}(|${q1}\\rangle \\otimes |${q2}\\rangle)`);
+                if (qubit === 0) {
+                    operatorSeparation.push(`${coeff}(${gate}|${q1}\\rangle \\otimes I|${q2}\\rangle)`);
+                    let gRes = gate === 'H' ? `\\frac{1}{\\sqrt{2}}(|0\\rangle + ${q1 === '0' ? '|1\\rangle' : '-|1\\rangle'})` : (gate === 'X' ? `|${q1 === '0' ? '1' : '0'}\\rangle` : `${q1 === '0' ? '' : '-'}|${q1}\\rangle`);
+                    localActionList.push(`${coeff}(${gRes} \\otimes |${q2}\\rangle)`);
+                } else {
+                    operatorSeparation.push(`${coeff}(I|${q1}\\rangle \\otimes ${gate}|${q2}\\rangle)`);
+                    let gRes = gate === 'H' ? `\\frac{1}{\\sqrt{2}}(|0\\rangle + ${q2 === '0' ? '|1\\rangle' : '-|1\\rangle'})` : (gate === 'X' ? `|${q2 === '0' ? '1' : '0'}\\rangle` : `${q2 === '0' ? '' : '-'}|${q2}\\rangle`);
+                    localActionList.push(`${coeff}(|${q1}\\rangle \\otimes ${gRes})`);
+                }
+            }
+        });
+        const wrap = (t) => t.length > 1 ? `(${t.join(" + ")})` : t[0];
+        return `<div class="derivation-block"><div class="property-label">Goal: Calculate state transformation</div>\\[ \\text{Compute: } ${opAction} \\]</div>
+        <div class="derivation-block"><div class="property-label">1) Justification: Expand computational basis states \\( |ab\\rangle = |a\\rangle \\otimes |b\\rangle \\)</div>\\[ ${op} ${wrap(startExpanded)} \\]</div>
+        <div class="derivation-block"><div class="property-label">2) Justification: Apply action of tensor-product operators: \\( (A \\otimes B)(|v\\rangle \\otimes |w\\rangle) = (A|v\\rangle) \\otimes (B|w\\rangle) \\)</div>\\[ = ${wrap(operatorSeparation)} \\]</div>
+        <div class="derivation-block"><div class="property-label">3) Justification: Evaluate local gate \\( ${gate} \\) and identity operator \\( I|x\\rangle = |x\\rangle \\)</div>\\[ = ${wrap(localActionList)} \\]</div>
+        <div class="derivation-block"><div class="property-label">4) Result: Combine into compact ket notation</div>\\[ = ${endKet} \\]</div>`;
+    }
+
+    getCNOTAlgebra(ctrl, tgt, startVec, endVec) {
+        const startKet = this.vecToDirac(startVec), endKet = this.vecToDirac(endVec);
+        const opAction = startVec.filter(v => v.magSq() > 0.001).length > 1 ? `\\text{CNOT}(${startKet})` : `\\text{CNOT}${startKet}`;
+        let linearityExp = [], basisExp = [];
+        const basisKets = ["00", "01", "10", "11"];
+        startVec.forEach((amp, i) => {
+            if (amp.magSq() > 0.001) {
+                let c = amp.toLatex(), coeff = (c === "1") ? "" : (c === "-1" ? "-" : c);
+                const cVal = basisKets[i][ctrl], tVal = basisKets[i][tgt];
+                const resT = cVal === "1" ? (tVal === "0" ? "1" : "0") : tVal;
+                let resKet = ctrl === 0 ? cVal + resT : resT + cVal;
+                linearityExp.push(`${coeff}\\text{CNOT}|${basisKets[i]}\\rangle`);
+                basisExp.push(`${coeff}|${resKet}\\rangle`);
+            }
+        });
+        const currentBellFound = this.detectBellState(endVec);
+        return `<div class="derivation-block"><div class="property-label">Goal: Apply CNOT operator</div>\\[ \\text{Compute: } ${opAction} \\]</div>
+        <div class="derivation-block"><div class="property-label">1) Justification: Linearity: \\( U(a|x\\rangle + b|y\\rangle) = aU|x\\rangle + bU|y\\rangle \\)</div>\\[ = ${linearityExp.join(" + ")} \\]</div>
+        <div class="derivation-block"><div class="property-label">2) Justification: Target flips iff Control is \\( |1\\rangle \\)</div>\\[ = ${basisExp.join(" + ")} \\]</div>
+        <div class="derivation-block"><div class="property-label">3) Result: Final Dirac state</div>\\[ = ${endKet} \\]
+        ${currentBellFound ? `<div style="color:var(--accent3); font-weight:bold; margin-top:10px;">Reached Bell State \\( \\text{${currentBellFound}} \\). ✅</div>` : ""}</div>`;
+    }
+
+    matToLatex(m) { return `\\begin{bmatrix} ${m.map(row => row.map(v => v.toLatex()).join(" & ")).join(" \\\\ ")} \\end{bmatrix}`; }
+    vecToLatex(v) { return `\\begin{bmatrix} ${v.map(val => val.toLatex()).join(" \\\\ ")} \\end{bmatrix}`; }
+    getCNOT01() { return [[1,0,0,0],[0,1,0,0],[0,0,0,1],[0,0,1,0]].map(r => r.map(v => new Complex(v))); }
+    getCNOT10() { return [[1,0,0,0],[0,0,0,1],[0,0,1,0],[0,1,0,0]].map(r => r.map(v => new Complex(v))); }
+
+    updateUI() {
+        const labels = ['00', '01', '10', '11'];
+        this.state.forEach((val, i) => {
+            const p = Math.round(val.magSq() * 100);
+            const bar = document.getElementById(`bar-${labels[i]}`), pval = document.getElementById(`pval-${labels[i]}`);
+            if (bar) bar.style.height = `${p}%`;
+            if (pval) pval.innerText = `${p}%`;
+        });
+
+        const status = document.getElementById('global-status');
+        const bellFound = this.detectBellState(this.state);
+        if (bellFound) {
+            status.innerText = `System Status: ${bellFound} Found!`;
+            status.classList.add('bell-active');
+        } else {
+            status.innerText = `System Status: Product State`;
+            status.classList.remove('bell-active');
+        }
+    }
+
+    addGateToUI(name, wire) {
+        const div = document.createElement('div');
+        div.className = 'gate-box'; div.innerText = name;
+        div.style.borderColor = wire === 0 ? 'var(--accent)' : 'var(--accent2)';
+        document.getElementById(`gates-${wire}`).appendChild(div);
+        const spacer = document.createElement('div');
+        spacer.className = 'gate-box'; spacer.style.opacity = '0';
+        document.getElementById(`gates-${wire === 0 ? 1 : 0}`).appendChild(spacer);
+        this.scrollCircuit();
+    }
+
+    addCNOTToUI(ctrl, tgt) {
+        const c = document.createElement('div'); c.className = 'gate-box cnot-ctrl'; c.innerText = '●';
+        const t = document.createElement('div'); t.className = 'gate-box cnot-tgt'; t.innerText = '⊕';
+        if (ctrl < tgt) c.classList.add('cnot-line-down'); else c.classList.add('cnot-line-up');
+        document.getElementById(`gates-${ctrl}`).appendChild(c);
+        document.getElementById(`gates-${tgt}`).appendChild(t);
+        this.scrollCircuit();
+    }
+
+    scrollCircuit() {
+        const container = document.getElementById('circuit-container');
+        container.scrollLeft = container.scrollWidth;
+    }
+}
+
+let sim;
+// INIT DRAG AND DROP
+window.onload = function() { 
+    sim = new Simulator();
+    
+    // DRAG HANDLERS
+    const paletteItems = document.querySelectorAll('.palette-item');
+    paletteItems.forEach(item => {
+        item.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('gateType', item.getAttribute('data-type'));
+            e.dataTransfer.effectAllowed = 'copy';
+        });
+    });
+
+    // DROP ZONES
+    const wires = document.querySelectorAll('.wire-row');
+    wires.forEach(wire => {
+        wire.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            wire.classList.add('drag-over');
+            e.dataTransfer.dropEffect = 'copy';
+        });
+        
+        wire.addEventListener('dragleave', (e) => {
+            wire.classList.remove('drag-over');
+        });
+
+        wire.addEventListener('drop', (e) => {
+            e.preventDefault();
+            wire.classList.remove('drag-over');
+            const type = e.dataTransfer.getData('gateType');
+            const wireId = parseInt(wire.getAttribute('data-wire'));
+            
+            if (type === 'CNOT') {
+                // If dropped on Wire 0, Ctrl=0, Tgt=1. Else Ctrl=1, Tgt=0
+                if (wireId === 0) sim.applyCNOT(0, 1);
+                else sim.applyCNOT(1, 0);
+            } else {
+                sim.applyGate(type, wireId);
+            }
+        });
+    });
+
+    // Keyboard reset listener
+    document.addEventListener('keydown', (e) => {
+        if (e.key === "Enter") {
+            sim.reset();
+        }
+    });
+};
+</script>
+</body>
+</html>
