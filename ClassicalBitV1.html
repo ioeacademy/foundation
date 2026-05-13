@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bit Visualizer: Presentation Mode</title>
+    <!-- Tailwind for layout -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600;800&family=Noto+Serif:ital,wght@0,400;0,700;1,400&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #020617;
+            color: #e2e8f0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden; /* Prevent body scroll, handle in main */
+        }
+
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .math { font-family: 'Noto Serif', serif; font-style: italic; }
+        .math-num { font-family: 'Noto Serif', serif; font-style: normal; }
+
+        /* Background Pattern */
+        .bg-pattern {
+            background-image: radial-gradient(#1e293b 1px, transparent 1px);
+            background-size: 24px 24px;
+            width: 100%;
+            height: 100%;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: -1;
+            opacity: 0.5;
+        }
+
+        /* Bit Button - Static White Style */
+        .bit-box-static {
+            background-color: #f8fafc; /* Slate 50 (White-ish) */
+            color: #0f172a; /* Slate 900 (Dark) */
+            border: 4px solid #cbd5e1; /* Slate 300 */
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .bit-box-static:hover { 
+            transform: translateY(-2px); 
+            border-color: #94a3b8; /* Slate 400 */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            cursor: pointer; 
+        }
+        .bit-box-static:active { 
+            transform: translateY(0px); 
+        }
+
+        /* Circuit Lines */
+        .glow-line { stroke: #22c55e; stroke-width: 4; filter: drop-shadow(0 0 6px #22c55e); transition: stroke 0.3s; }
+        .off-line { stroke: #ef4444; stroke-width: 4; transition: stroke 0.3s; }
+        .neutral-line { stroke: #475569; stroke-width: 3; transition: stroke 0.3s; }
+
+        /* Animations */
+        #switchArmGroup { transition: transform 0.3s ease-out; }
+        #voltmeterNeedleGroup { transition: transform 0.5s ease-out; }
+        
+        /* Logic View Specifics */
+        .logic-point { transition: all 0.3s ease; }
+        .logic-active { fill: #22c55e; stroke: #22c55e; r: 8; }
+        .logic-inactive { fill: #334155; stroke: #475569; r: 6; }
+        .logic-box-active { stroke: #22c55e; stroke-width: 3; fill: rgba(34, 197, 94, 0.15); }
+        .logic-box-inactive { stroke: #475569; stroke-width: 2; fill: transparent; }
+
+        /* Panel Styling */
+        .panel-card {
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(12px);
+            border: 1px solid #334155;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            transition: background 0.3s, border-color 0.3s; /* Smooth visual transition */
+        }
+
+        /* Custom Scrollbar */
+        #mainScroll::-webkit-scrollbar {
+            height: 8px;
+        }
+        #mainScroll::-webkit-scrollbar-track {
+            background: #0f172a; 
+            border-radius: 4px;
+        }
+        #mainScroll::-webkit-scrollbar-thumb {
+            background: #334155; 
+            border-radius: 4px;
+        }
+        #mainScroll::-webkit-scrollbar-thumb:hover {
+            background: #475569; 
+        }
+
+        /* Interactive SVG Elements */
+        .interactive-svg-el {
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .interactive-svg-el:hover {
+            opacity: 0.8;
+        }
+        
+        /* Uniform Box Utility & Collapse Logic */
+        .uniform-box {
+            width: 85vw;
+            height: 550px; 
+            flex-shrink: 0;
+            scroll-snap-align: center;
+            transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1), height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: grab; /* Indicate draggable */
+        }
+        .uniform-box:active {
+            cursor: grabbing;
+        }
+        
+        /* Dragging State for Panels */
+        .uniform-box.dragging {
+            opacity: 0.5;
+            transform: scale(0.98);
+            border: 2px dashed #475569;
+            border-radius: 1.5rem;
+        }
+
+        @media (min-width: 768px) {
+            .uniform-box {
+                width: 600px;
+            }
+        }
+
+        /* --- COLLAPSED STATE STYLES --- */
+        .uniform-box.collapsed {
+            width: 80px !important;
+            height: 80px !important;
+            min-height: 0;
+            overflow: hidden;
+            border-radius: 1.5rem;
+        }
+
+        .uniform-box.collapsed .panel-card {
+            padding: 0;
+            justify-content: center;
+            align-items: center;
+            background: rgba(30, 41, 59, 0.5); /* Dimmed background */
+            border-color: #334155;
+        }
+
+        /* Hide elements when collapsed using CSS selectors */
+        .uniform-box.collapsed .panel-header-text,
+        .uniform-box.collapsed .panel-status-text,
+        .uniform-box.collapsed .panel-body,
+        .uniform-box.collapsed .panel-footer,
+        .uniform-box.collapsed .panel-palette {
+            display: none !important;
+        }
+
+        /* Adjust header row for collapsed state */
+        .uniform-box.collapsed .panel-header-row {
+            border-bottom: none !important;
+            width: 100%;
+            height: 100%;
+            justify-content: center;
+            padding: 0;
+            margin: 0;
+        }
+
+        /* Force Icon to Grayout State when Collapsed */
+        .uniform-box.collapsed .icon-wrapper {
+            background-color: #1e293b !important; /* slate-800 */
+            color: #64748b !important; /* slate-500 */
+            transform: scale(1);
+            margin: 0;
+        }
+
+        /* Icon Interactivity */
+        .icon-wrapper {
+            cursor: pointer;
+            transition: transform 0.2s, background-color 0.3s, color 0.3s;
+        }
+        .icon-wrapper:hover {
+            transform: scale(1.1);
+            filter: brightness(1.2);
+        }
+
+        /* Custom Input Styles */
+        .coeff-input {
+            background: #0f172a;
+            border: 1px solid #475569;
+            color: #fff;
+            font-family: 'JetBrains Mono', monospace;
+            text-align: center;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        .coeff-input:focus {
+            border-color: #3b82f6;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+        }
+
+        /* Gate Palette Styles */
+        .gate-item {
+            cursor: grab;
+            transition: all 0.2s;
+            user-select: none;
+        }
+        .gate-item:active { cursor: grabbing; }
+        .gate-item:hover { transform: translateY(-2px); }
+        
+        .drop-zone {
+            transition: all 0.3s;
+        }
+        .drop-zone.drag-over {
+            stroke: #22c55e;
+            stroke-width: 3;
+            stroke-dasharray: 5,5;
+            fill: rgba(34, 197, 94, 0.1);
+        }
+    </style>
+</head>
+<body class="w-full h-screen overflow-hidden">
+
+    <div class="bg-pattern"></div>
+
+    <!-- HEADER / TOP BAR AREA -->
+    <div class="w-full bg-slate-900/80 backdrop-blur-md border-b border-slate-800 p-4 sm:px-8 flex flex-col md:flex-row items-center justify-between gap-6 shrink-0 z-50">
+        
+        <!-- LEFT: Static Bit Button -->
+        <div class="flex-shrink-0">
+            <button id="bitBtn" onclick="toggleBit()" class="bit-box-static h-24 px-10 rounded-2xl flex items-center justify-center text-5xl font-bold mono select-none outline-none focus:ring-2 ring-blue-500/50">
+                <span class="text-slate-400 mr-4 font-serif italic text-4xl">[B] =</span> [0]
+            </button>
+        </div>
+
+        <!-- RIGHT: Title & Controls -->
+        <div class="flex flex-col md:flex-row items-center gap-6 w-full md:w-auto justify-end">
+            <div class="text-center md:text-right">
+                <h1 class="text-2xl font-extrabold text-white tracking-tight drop-shadow-sm">The Digital Bit</h1>
+                <p class="text-slate-400 text-xs uppercase tracking-wider font-semibold">Physics & Math Visualization</p>
+            </div>
+            
+            <!-- View Toggles -->
+            <div class="bg-slate-800 p-1 rounded-lg flex gap-1 border border-slate-700">
+                <button onclick="setView('simple')" id="btnSimple" class="px-4 py-2 rounded-md text-sm font-bold transition-colors text-slate-400 hover:text-white">
+                    Physical Only
+                </button>
+                <button onclick="setView('split')" id="btnSplit" class="px-4 py-2 rounded-md text-sm font-bold transition-colors bg-slate-600 text-white shadow-md ring-1 ring-white/10">
+                    All Views
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Horizontal Scroll Area -->
+    <main id="mainScroll" class="w-full flex-grow flex items-center overflow-x-auto overflow-y-hidden snap-x snap-mandatory px-4 sm:px-12 gap-8">
+        
+        <!-- PANEL 1: PHYSICAL VIEW -->
+        <div id="panelPhysical" class="uniform-box draggable-panel" draggable="true">
+            <div id="cardSwitch" class="panel-card p-6 rounded-3xl transition-colors duration-300">
+                <!-- HEADER -->
+                <div class="flex justify-between items-center border-b border-slate-700 pb-3 shrink-0 panel-header-row">
+                    <div class="flex items-center gap-4">
+                        <div id="iconSwitch" onclick="togglePanel('panelPhysical')" class="icon-wrapper w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-slate-500 text-lg transition-colors duration-300" title="Toggle Physical View">
+                            <i class="fa-solid fa-microchip"></i>
+                        </div>
+                        <div class="panel-header-text">
+                            <div class="text-sm text-slate-300 uppercase tracking-wider font-bold">Physical View</div>
+                            <div class="text-xs text-slate-500 font-medium">Electrical Circuit</div>
+                        </div>
+                    </div>
+                    <div id="switchStateText" class="panel-status-text text-2xl font-bold mono text-slate-500 transition-colors duration-300">OPEN</div>
+                </div>
+                <!-- BODY: SVG -->
+                <div class="panel-body flex justify-center items-center relative select-none flex-grow min-h-0">
+                    <svg width="100%" height="100%" viewBox="0 0 350 200" preserveAspectRatio="xMidYMid meet">
+                        <!-- Battery -->
+                        <g transform="translate(60, 100)">
+                            <line x1="0" y1="-50" x2="0" y2="-15" class="neutral-line" id="wire-bat-top" />
+                            <line x1="0" y1="15" x2="0" y2="50" class="neutral-line" id="wire-bat-bot" />
+                            <line x1="-15" y1="-15" x2="15" y2="-15" stroke="#cbd5e1" stroke-width="4" />
+                            <line x1="-8" y1="15" x2="8" y2="15" stroke="#cbd5e1" stroke-width="4" />
+                            <text x="-40" y="5" fill="#cbd5e1" font-family="monospace" font-weight="bold" font-size="16">5V</text>
+                            <text x="25" y="-10" fill="#22c55e" font-weight="bold" font-size="18">+</text>
+                        </g>
+                        <!-- Switch -->
+                        <g onclick="toggleBit()" class="interactive-svg-el" role="button" aria-label="Toggle Switch">
+                            <rect x="100" y="10" width="120" height="80" fill="transparent" />
+                            <rect x="110" y="20" width="100" height="60" rx="6" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="6,4" />
+                            <line x1="60" y1="50" x2="130" y2="50" class="neutral-line" id="wire-top-left" />
+                            <circle cx="130" cy="50" r="5" fill="#94a3b8" />
+                            <circle cx="190" cy="50" r="5" fill="#94a3b8" />
+                            <g id="switchArmGroup" transform="translate(130, 50)">
+                                <line id="switchArm" x1="0" y1="0" x2="60" y2="0" class="neutral-line" stroke-linecap="round" />
+                                <circle cx="60" cy="0" r="4" fill="#64748b" />
+                            </g>
+                        </g>
+                        <line x1="190" y1="50" x2="280" y2="50" class="neutral-line" id="wire-top-right" />
+                        <!-- Voltmeter -->
+                        <g transform="translate(280, 100)">
+                            <line x1="0" y1="-50" x2="0" y2="-25" class="neutral-line" id="wire-volt-top" />
+                            <line x1="0" y1="25" x2="0" y2="50" class="neutral-line" id="wire-volt-bot" />
+                            <circle cx="0" cy="0" r="30" fill="#1e293b" stroke="#94a3b8" stroke-width="3" />
+                            <text x="0" y="20" text-anchor="middle" fill="#e2e8f0" font-size="14" font-weight="bold" font-family="serif">V</text>
+                            <g id="voltmeterNeedleGroup" transform="rotate(-45)">
+                                <line x1="0" y1="5" x2="0" y2="-22" id="voltmeterNeedle" stroke="#ef4444" stroke-width="3" stroke-linecap="round" />
+                                <polygon points="0,-26 -4,-18 4,-18" fill="#ef4444" id="voltmeterArrowHead" />
+                                <circle cx="0" cy="0" r="3" fill="#cbd5e1" />
+                            </g>
+                        </g>
+                        <polyline points="280,150 280,150 60,150 60,150" class="neutral-line" fill="none" id="wire-bottom" />
+                    </svg>
+                </div>
+                <!-- FOOTER -->
+                <div id="descText" class="panel-footer mt-auto pt-4 border-t border-slate-700/50 text-center text-slate-300 text-lg font-medium">The switch is open.</div>
+            </div>
+        </div>
+
+        <!-- PANEL 2: GRAPHICAL VIEW -->
+        <div id="panelGraphical" class="uniform-box draggable-panel" draggable="true">
+             <div class="panel-card p-6 rounded-3xl">
+                <!-- HEADER -->
+                <div class="flex items-center gap-4 border-b border-slate-700 pb-3 shrink-0 panel-header-row">
+                    <div onclick="togglePanel('panelGraphical')" class="icon-wrapper w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-blue-400 text-lg" title="Toggle Graphical View">
+                        <i class="fa-solid fa-chart-line"></i>
+                    </div>
+                    <div class="panel-header-text">
+                        <div class="text-sm text-slate-300 uppercase tracking-wider font-bold">Graphical View</div>
+                        <div class="text-xs text-slate-500 font-medium">Discrete State Space</div>
+                    </div>
+                </div>
+                <!-- BODY -->
+                <div class="panel-body flex-grow flex items-center justify-center relative min-h-0">
+                    <svg width="100%" height="100%" viewBox="0 0 350 300" preserveAspectRatio="xMidYMid meet">
+                        <line x1="100" y1="40" x2="100" y2="260" stroke="#475569" stroke-width="2" marker-end="url(#arrowhead)" />
+                        <line x1="95" y1="80" x2="105" y2="80" stroke="#94a3b8" stroke-width="2" />
+                        <line x1="95" y1="220" x2="105" y2="220" stroke="#94a3b8" stroke-width="2" />
+                        <defs><marker id="arrowhead" markerWidth="12" markerHeight="8" refX="0" refY="4" orient="auto"><polygon points="0 0, 12 4, 0 8" fill="#475569" /></marker></defs>
+                        <text x="25" y="8" fill="#94a3b8" font-family="monospace" font-weight="bold" font-size="16" text-anchor="start" transform="translate(100, 80)">State [B] =</text>
+                        <g transform="translate(100, 80)" onclick="setBit(0)" class="interactive-svg-el">
+                            <rect x="-10" y="-30" width="220" height="60" fill="transparent" />
+                            <circle id="logicDot0" cx="0" cy="0" r="4" class="logic-inactive" />
+                            <line x1="0" y1="0" x2="20" y2="0" stroke="#475569" stroke-width="1" stroke-dasharray="2,2"/>
+                            <rect id="logicBox0" x="140" y="-20" width="40" height="40" rx="6" class="logic-box-active" />
+                            <text x="160" y="8" fill="#cbd5e1" font-family="monospace" font-weight="bold" font-size="20" text-anchor="middle">0</text>
+                        </g>
+                        <text x="25" y="8" fill="#94a3b8" font-family="monospace" font-weight="bold" font-size="16" text-anchor="start" transform="translate(100, 220)">State [B] =</text>
+                        <g transform="translate(100, 220)" onclick="setBit(1)" class="interactive-svg-el">
+                            <rect x="-10" y="-30" width="220" height="60" fill="transparent" />
+                            <circle id="logicDot1" cx="0" cy="0" r="6" class="logic-active" />
+                            <line x1="0" y1="0" x2="20" y2="0" stroke="#475569" stroke-width="1" stroke-dasharray="2,2"/>
+                            <rect id="logicBox1" x="140" y="-20" width="40" height="40" rx="6" class="logic-box-inactive" />
+                            <text x="160" y="8" fill="#cbd5e1" font-family="monospace" font-weight="bold" font-size="20" text-anchor="middle">1</text>
+                        </g>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <!-- PANEL 3: DIGITAL LOGIC (NEW) -->
+        <div id="panelDigital" class="uniform-box draggable-panel" draggable="true">
+            <div class="panel-card p-6 rounded-3xl bg-slate-900 border border-slate-700">
+                <!-- HEADER -->
+                <div class="flex items-center gap-4 border-b border-slate-700 pb-3 shrink-0 panel-header-row">
+                    <div onclick="togglePanel('panelDigital')" class="icon-wrapper w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-green-400 text-lg" title="Toggle Digital View">
+                        <i class="fa-solid fa-diagram-project"></i>
+                    </div>
+                    <div class="panel-header-text">
+                        <div class="text-sm text-slate-300 uppercase tracking-wider font-bold">Circuit View</div>
+                        <div class="text-xs text-slate-500 font-medium">Digital Logic Simulation</div>
+                    </div>
+                </div>
+
+                <!-- BODY: Circuit Canvas -->
+                <div class="panel-body flex-grow relative bg-slate-950/50 rounded-xl my-4 overflow-hidden border border-slate-800">
+                    <svg width="100%" height="100%" viewBox="0 0 400 250" preserveAspectRatio="xMidYMid meet" id="logicCanvas">
+                        <!-- Inputs -->
+                        <g transform="translate(40, 60)" onclick="toggleDigBit(1)" class="cursor-pointer hover:opacity-80">
+                            <rect x="-20" y="-20" width="40" height="40" rx="4" fill="#1e293b" stroke="#475569" id="btnDig1Bg"/>
+                            <text x="0" y="5" text-anchor="middle" fill="#94a3b8" font-family="monospace" font-weight="bold" font-size="16" id="txtDig1">0</text>
+                            <text x="-25" y="5" text-anchor="end" fill="#64748b" font-size="12">B1</text>
+                        </g>
+                        <g transform="translate(40, 190)" onclick="toggleDigBit(2)" class="cursor-pointer hover:opacity-80">
+                            <rect x="-20" y="-20" width="40" height="40" rx="4" fill="#1e293b" stroke="#475569" id="btnDig2Bg"/>
+                            <text x="0" y="5" text-anchor="middle" fill="#94a3b8" font-family="monospace" font-weight="bold" font-size="16" id="txtDig2">0</text>
+                            <text x="-25" y="5" text-anchor="end" fill="#64748b" font-size="12">B2</text>
+                        </g>
+
+                        <!-- Wires Input to Gate -->
+                        <path d="M 60 60 L 150 60 L 150 100" fill="none" stroke="#475569" stroke-width="3" id="wireDig1" />
+                        <path d="M 60 190 L 150 190 L 150 150" fill="none" stroke="#475569" stroke-width="3" id="wireDig2" />
+
+                        <!-- Gate Drop Zone (Center) -->
+                        <g transform="translate(150, 80)" id="gateSlot">
+                            <rect x="0" y="0" width="100" height="90" fill="transparent" stroke="#475569" stroke-dasharray="5,5" stroke-width="2" rx="4" id="gateBox" class="drop-zone"/>
+                            <text x="50" y="50" text-anchor="middle" fill="#475569" font-size="12" id="gateLabel">Drop Gate Here</text>
+                            <!-- Dynamic Gate Icon Container -->
+                            <g id="currentGateIcon" transform="translate(50, 45) scale(1.2)"></g>
+                        </g>
+
+                        <!-- OUTPUT 1: Main Output Wire & Voltmeter (Normally Centered) -->
+                        <g id="outputGroup1">
+                            <line x1="250" y1="125" x2="320" y2="125" stroke="#475569" stroke-width="3" id="wireDigOut" />
+                            <g transform="translate(350, 125)" id="voltmeter1">
+                                <circle cx="0" cy="0" r="25" fill="#1e293b" stroke="#475569" stroke-width="2" id="digVoltBg"/>
+                                <text x="0" y="5" text-anchor="middle" fill="#64748b" font-size="10" font-weight="bold" id="digVoltText">0V</text>
+                                <circle cx="0" cy="0" r="2" fill="#64748b"/>
+                                <line x1="0" y1="5" x2="0" y2="-20" stroke="#ef4444" stroke-width="2" stroke-linecap="round" id="digVoltNeedle" transform="rotate(-45)"/>
+                            </g>
+                        </g>
+
+                        <!-- OUTPUT 2: Secondary Wire & Voltmeter (For CNOT, Top Rail) -->
+                        <g id="outputGroup2" style="display: none;">
+                            <line x1="250" y1="100" x2="320" y2="100" stroke="#475569" stroke-width="3" id="wireDigOut2" />
+                            <g transform="translate(350, 100)" id="voltmeter2">
+                                <circle cx="0" cy="0" r="25" fill="#1e293b" stroke="#475569" stroke-width="2" id="digVoltBg2"/>
+                                <text x="0" y="5" text-anchor="middle" fill="#64748b" font-size="10" font-weight="bold" id="digVoltText2">0V</text>
+                                <circle cx="0" cy="0" r="2" fill="#64748b"/>
+                                <line x1="0" y1="5" x2="0" y2="-20" stroke="#ef4444" stroke-width="2" stroke-linecap="round" id="digVoltNeedle2" transform="rotate(-45)"/>
+                            </g>
+                        </g>
+                    </svg>
+                </div>
+
+                <!-- FOOTER: Palette -->
+                <div class="panel-palette h-16 border-t border-slate-800 flex items-center justify-center gap-4 bg-slate-900/50 rounded-b-2xl">
+                    <div class="gate-item w-12 h-10 bg-slate-800 rounded flex items-center justify-center text-slate-300 font-bold border border-slate-700" draggable="true" ondragstart="dragGate(event, 'AND')">AND</div>
+                    <div class="gate-item w-12 h-10 bg-slate-800 rounded flex items-center justify-center text-slate-300 font-bold border border-slate-700" draggable="true" ondragstart="dragGate(event, 'OR')">OR</div>
+                    <div class="gate-item w-12 h-10 bg-slate-800 rounded flex items-center justify-center text-slate-300 font-bold border border-slate-700" draggable="true" ondragstart="dragGate(event, 'XOR')">XOR</div>
+                    <div class="gate-item w-12 h-10 bg-slate-800 rounded flex items-center justify-center text-slate-300 font-bold border border-slate-700" draggable="true" ondragstart="dragGate(event, 'NOT')">NOT</div>
+                    <div class="gate-item w-14 h-10 bg-slate-800 rounded flex items-center justify-center text-slate-300 font-bold border border-slate-700" draggable="true" ondragstart="dragGate(event, 'CNOT')">CNOT</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PANEL 4: MATH VIEW -->
+        <div id="panelMath" class="uniform-box draggable-panel" draggable="true">
+            <div class="panel-card p-6 rounded-3xl">
+                <!-- HEADER -->
+                <div class="flex items-center gap-4 border-b border-slate-700 pb-3 shrink-0 panel-header-row">
+                    <div onclick="togglePanel('panelMath')" class="icon-wrapper w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-purple-400 text-lg" title="Toggle Math View">
+                        <i class="fa-solid fa-square-root-variable"></i>
+                    </div>
+                    <div class="panel-header-text">
+                        <div class="text-sm text-slate-300 uppercase tracking-wider font-bold">Math View</div>
+                        <div class="text-xs text-slate-500 font-medium">Linear Combination</div>
+                    </div>
+                </div>
+                <!-- BODY -->
+                <div class="panel-body py-4 px-2 flex flex-col gap-6 justify-center flex-grow min-h-0">
+                    <!-- Formulas as before -->
+                    <div class="grid grid-cols-[auto_auto] gap-x-4 gap-y-2 justify-center w-full">
+                        <div class="flex items-baseline justify-end">
+                            <span class="math text-4xl sm:text-5xl text-slate-200">[B] =</span>
+                        </div>
+                        <div class="flex items-baseline justify-start">
+                            <div class="flex items-baseline">
+                                <span class="math-var text-3xl sm:text-4xl text-slate-400">a</span> 
+                                <span class="mx-2 text-2xl text-slate-500">&middot;</span> 
+                                <span class="font-bold font-mono text-3xl sm:text-4xl text-white">[1]</span>
+                                <span class="mx-3 text-3xl text-slate-500">+</span>
+                                <span class="math-var text-3xl sm:text-4xl text-slate-400">b</span> 
+                                <span class="mx-2 text-2xl text-slate-500">&middot;</span> 
+                                <span class="font-bold font-mono text-3xl sm:text-4xl text-white">[0]</span>
+                            </div>
+                        </div>
+                        <div class="col-start-1 row-start-2 flex justify-center pt-2">
+                            <div class="flex items-center">
+                                 <svg width="20" height="50" viewBox="0 0 24 64" fill="none" stroke="#64748b" stroke-width="3" class="mr-1"><path d="M 20 2 Q 5 2 5 16 L 5 26 Q 5 32 0 32 Q 5 32 5 38 L 5 48 Q 5 62 20 62" /></svg>
+                                <div class="flex flex-col gap-1 text-base sm:text-lg text-slate-400 text-left">
+                                    <div><span class="math text-slate-300">a, b</span> &isin; {0, 1}</div>
+                                    <div><span class="math text-slate-300">a + b</span> = 1</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Inputs -->
+                    <div class="bg-slate-800/50 p-3 rounded-xl border border-slate-700 flex justify-center gap-8 items-center mt-2 mb-2">
+                        <div class="flex items-center gap-2">
+                            <span class="math text-slate-400 text-xl font-bold italic">a =</span>
+                            <input type="text" id="inputA" class="coeff-input w-12 h-12 text-xl" value="0">
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="math text-slate-400 text-xl font-bold italic">b =</span>
+                            <input type="text" id="inputB" class="coeff-input w-12 h-12 text-xl" value="1">
+                        </div>
+                    </div>
+                    <!-- Dynamic Calc -->
+                    <div class="mt-2 bg-slate-950/60 p-4 rounded-xl border border-slate-700 text-center shadow-inner flex flex-row flex-nowrap whitespace-nowrap justify-center items-center">
+                        <div class="text-3xl md:text-4xl flex flex-row justify-center items-center whitespace-nowrap"> 
+                            <span class="math text-white font-bold align-middle mr-2">[B]</span>
+                            <span class="math text-slate-500 text-3xl align-middle mr-2">=</span>
+                            <span id="mathCoeffA" class="math-num text-slate-600 text-3xl">0</span> 
+                            <span class="text-slate-600 text-2xl mx-1 align-middle">&middot;</span>
+                            <span id="mathVec1" onclick="setBit(1)" class="font-bold font-mono text-slate-600 transition-all duration-300 cursor-pointer hover:opacity-80 select-none" title="Set to 1">[1]</span>
+                            <span class="text-slate-600 mx-3 text-3xl align-middle">+</span>
+                            <span id="mathCoeffB" class="math-num text-slate-600 text-3xl">1</span> 
+                            <span class="text-slate-600 text-2xl mx-1 align-middle">&middot;</span>
+                            <span id="mathVec0" onclick="setBit(0)" class="font-bold font-mono text-green-400 scale-110 inline-block transition-all duration-300 cursor-pointer hover:opacity-80 select-none" title="Set to 0">[0]</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        // --- GLOBAL STATE ---
+        let bitState = 0;
+        let viewMode = 'split'; 
+        
+        // --- DIGITAL LOGIC STATE ---
+        let digB1 = 0;
+        let digB2 = 0;
+        let currentGate = null; // 'AND', 'OR', 'XOR', 'NOT', 'CNOT'
+
+        // --- MAIN FUNCTIONS ---
+
+        function togglePanel(id) {
+            const panel = document.getElementById(id);
+            panel.classList.toggle('collapsed');
+        }
+
+        function setView(mode) {
+            viewMode = mode;
+            const panels = ['panelGraphical', 'panelMath', 'panelDigital'];
+            
+            // Buttons
+            const btnSimple = document.getElementById('btnSimple');
+            const btnSplit = document.getElementById('btnSplit');
+
+            if (mode === 'simple') {
+                panels.forEach(id => document.getElementById(id).classList.add('hidden'));
+                btnSimple.className = "px-4 py-2 rounded-md text-sm font-bold transition-colors bg-slate-600 text-white shadow-md ring-1 ring-white/10";
+                btnSplit.className = "px-4 py-2 rounded-md text-sm font-bold transition-colors text-slate-400 hover:text-white";
+            } else {
+                panels.forEach(id => document.getElementById(id).classList.remove('hidden'));
+                btnSplit.className = "px-4 py-2 rounded-md text-sm font-bold transition-colors bg-slate-600 text-white shadow-md ring-1 ring-white/10";
+                btnSimple.className = "px-4 py-2 rounded-md text-sm font-bold transition-colors text-slate-400 hover:text-white";
+            }
+        }
+
+        function setBit(newState) {
+            if (bitState !== newState) {
+                bitState = newState;
+                updateUI();
+            }
+        }
+
+        function toggleBit() {
+            setBit(bitState === 0 ? 1 : 0);
+        }
+
+        // --- DIGITAL LOGIC FUNCTIONS ---
+        
+        function toggleDigBit(n) {
+            if (n === 1) digB1 = digB1 === 0 ? 1 : 0;
+            if (n === 2) digB2 = digB2 === 0 ? 1 : 0;
+            updateDigitalUI();
+        }
+
+        function dragGate(ev, type) {
+            ev.dataTransfer.setData("gateType", type);
+        }
+
+        // Allow Drop
+        const gateSlot = document.getElementById('gateSlot');
+        gateSlot.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation(); 
+            document.getElementById('gateBox').classList.add('drag-over');
+        });
+
+        gateSlot.addEventListener('dragleave', (e) => {
+            document.getElementById('gateBox').classList.remove('drag-over');
+        });
+
+        gateSlot.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            document.getElementById('gateBox').classList.remove('drag-over');
+            const type = e.dataTransfer.getData("gateType");
+            if (type) {
+                currentGate = type;
+                updateDigitalUI();
+            }
+        });
+
+        function updateDigitalUI() {
+            // Update Inputs
+            const updateInputVis = (idBg, idTxt, val) => {
+                const bg = document.getElementById(idBg);
+                const txt = document.getElementById(idTxt);
+                txt.textContent = val;
+                if (val === 1) {
+                    bg.setAttribute('stroke', '#22c55e');
+                    bg.setAttribute('fill', 'rgba(34, 197, 94, 0.2)');
+                    txt.setAttribute('fill', '#4ade80');
+                } else {
+                    bg.setAttribute('stroke', '#475569');
+                    bg.setAttribute('fill', '#1e293b');
+                    txt.setAttribute('fill', '#94a3b8');
+                }
+            }
+            updateInputVis('btnDig1Bg', 'txtDig1', digB1);
+            updateInputVis('btnDig2Bg', 'txtDig2', digB2);
+
+            // Calculate Output
+            let out1 = 0; // Top Output
+            let out2 = 0; // Bottom Output (often unused except CNOT)
+            let gateLabel = "Drop Gate";
+            let gateSymbol = ""; 
+            
+            // Helper for colors
+            const colorOn = "#22c55e";
+            const colorOff = "#475569";
+            const colorRed = "#ef4444";
+
+            // Determine if 2nd wire is needed
+            let useTwoOutputs = false;
+
+            if (currentGate === 'AND') {
+                out1 = (digB1 === 1 && digB2 === 1) ? 1 : 0;
+                gateLabel = "AND";
+                gateSymbol = '<path d="M -15,-15 L 0,-15 A 15,15 0 0 1 0,15 L -15,15 Z" fill="none" stroke="#e2e8f0" stroke-width="2"/>';
+            } else if (currentGate === 'OR') {
+                out1 = (digB1 === 1 || digB2 === 1) ? 1 : 0;
+                gateLabel = "OR";
+                gateSymbol = '<path d="M -15,-15 Q 5,0 -15,15 Q 0,15 10,0 Q 0,-15 -15,-15" fill="none" stroke="#e2e8f0" stroke-width="2"/>';
+            } else if (currentGate === 'XOR') {
+                out1 = (digB1 !== digB2) ? 1 : 0;
+                gateLabel = "XOR";
+                gateSymbol = '<path d="M -18,-15 Q 2,0 -18,15 M -13,-15 Q 7,0 -13,15 Q 2,15 12,0 Q 2,-15 -13,-15" fill="none" stroke="#e2e8f0" stroke-width="2"/>';
+            } else if (currentGate === 'NOT') {
+                out1 = (digB1 === 0) ? 1 : 0;
+                gateLabel = "NOT (B1)";
+                gateSymbol = '<path d="M -10,-10 L 10,0 L -10,10 Z" fill="none" stroke="#e2e8f0" stroke-width="2"/><circle cx="14" cy="0" r="3" stroke="#e2e8f0" stroke-width="2" fill="none"/>';
+            } else if (currentGate === 'CNOT') {
+                // CNOT Logic
+                // Output 1 (Top) = B1
+                // Output 2 (Bottom) = B1 XOR B2
+                out1 = digB1; // Control passes through
+                out2 = (digB1 !== digB2) ? 1 : 0; // Target flips if Control is 1
+                gateLabel = "CNOT";
+                useTwoOutputs = true;
+                
+                // CNOT Symbol: Vertical line, dot on top, cross circle on bottom
+                // Coordinates relative to center (50, 45). Top wire y ~ -25, Bottom y ~ 25 relative
+                gateSymbol = `
+                    <line x1="-30" y1="-25" x2="-30" y2="25" stroke="#e2e8f0" stroke-width="2"/>
+                    <circle cx="-30" cy="-25" r="4" fill="#e2e8f0"/>
+                    <circle cx="-30" cy="25" r="8" fill="none" stroke="#e2e8f0" stroke-width="2"/>
+                    <line x1="-30" y1="17" x2="-30" y2="33" stroke="#e2e8f0" stroke-width="2"/>
+                    <line x1="-38" y1="25" x2="-22" y2="25" stroke="#e2e8f0" stroke-width="2"/>
+                `;
+            }
+
+            document.getElementById('gateLabel').textContent = gateLabel;
+            document.getElementById('currentGateIcon').innerHTML = gateSymbol;
+
+            // --- Wire Coloring Inputs ---
+            document.getElementById('wireDig1').setAttribute('stroke', digB1 ? colorOn : colorOff);
+            if (currentGate === 'NOT') {
+                document.getElementById('wireDig2').setAttribute('stroke', '#334155'); 
+                document.getElementById('wireDig2').setAttribute('stroke-dasharray', '4,4');
+            } else {
+                document.getElementById('wireDig2').setAttribute('stroke', digB2 ? colorOn : colorOff);
+                document.getElementById('wireDig2').removeAttribute('stroke-dasharray');
+            }
+
+            // --- Handling Outputs ---
+            const outGroup2 = document.getElementById('outputGroup2');
+            const wireOut1 = document.getElementById('wireDigOut');
+            const volt1 = document.getElementById('voltmeter1');
+            const wireOut2 = document.getElementById('wireDigOut2');
+            const volt2 = document.getElementById('voltmeter2');
+
+            // 1. Configure Layout based on CNOT vs Standard
+            if (useTwoOutputs) {
+                outGroup2.style.display = 'block';
+                // For CNOT, Top Output is at y=100 (matches Input 1), Bottom at y=150 (matches Input 2)
+                
+                // Move Output 1 (Top / Control) to y=100
+                wireOut1.setAttribute('y1', '100');
+                wireOut1.setAttribute('y2', '100');
+                volt1.setAttribute('transform', 'translate(350, 100)');
+
+                // Move Output 2 (Bottom / Target) to y=150
+                wireOut2.setAttribute('y1', '150');
+                wireOut2.setAttribute('y2', '150');
+                volt2.setAttribute('transform', 'translate(350, 150)');
+
+                // Set Colors/Values
+                // Top (Control)
+                const c1 = out1 === 1 ? colorOn : colorOff;
+                wireOut1.setAttribute('stroke', c1);
+                updateVoltmeter('digVoltNeedle', 'digVoltText', 'digVoltBg', out1);
+
+                // Bottom (Target)
+                const c2 = out2 === 1 ? colorOn : colorOff;
+                wireOut2.setAttribute('stroke', c2);
+                updateVoltmeter('digVoltNeedle2', 'digVoltText2', 'digVoltBg2', out2);
+
+            } else {
+                outGroup2.style.display = 'none';
+                // Standard: Output centered at y=125
+                wireOut1.setAttribute('y1', '125');
+                wireOut1.setAttribute('y2', '125');
+                volt1.setAttribute('transform', 'translate(350, 125)');
+
+                const c = (currentGate && out1 === 1) ? colorOn : colorOff;
+                wireOut1.setAttribute('stroke', c);
+                updateVoltmeter('digVoltNeedle', 'digVoltText', 'digVoltBg', currentGate ? out1 : 0);
+            }
+        }
+
+        function updateVoltmeter(idNeedle, idText, idBg, val) {
+            const needle = document.getElementById(idNeedle);
+            const text = document.getElementById(idText);
+            const bg = document.getElementById(idBg);
+            const colorOn = "#22c55e";
+            const colorOff = "#475569";
+            const colorRed = "#ef4444";
+
+            if (val === 1) {
+                needle.setAttribute('transform', 'rotate(45)');
+                needle.setAttribute('stroke', colorOn);
+                text.textContent = "5V";
+                text.setAttribute('fill', colorOn);
+                bg.setAttribute('stroke', colorOn);
+            } else {
+                needle.setAttribute('transform', 'rotate(-45)');
+                needle.setAttribute('stroke', colorRed);
+                text.textContent = "0V";
+                text.setAttribute('fill', colorRed);
+                bg.setAttribute('stroke', colorRed); // Or Red if you prefer 0V to be red
+            }
+        }
+
+
+        // --- MATH VIEW INPUTS ---
+        const inputA = document.getElementById('inputA');
+        const inputB = document.getElementById('inputB');
+
+        inputA.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            if (!isNaN(val)) {
+                if (val > 0) setBit(1); 
+                else setBit(0);
+            }
+        });
+
+        inputB.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            if (!isNaN(val)) {
+                if (val > 0) setBit(0); 
+                else setBit(1);
+            }
+        });
+
+        // --- MAIN UPDATE UI ---
+        function updateUI() {
+            // Button Update
+            const btn = document.getElementById('bitBtn');
+            const desc = document.getElementById('descText');
+            
+            // Physical Elements
+            const cardSwitch = document.getElementById('cardSwitch');
+            const iconSwitch = document.getElementById('iconSwitch');
+            const switchStateText = document.getElementById('switchStateText');
+            const switchArmGroup = document.getElementById('switchArmGroup');
+            const voltmeterNeedleGroup = document.getElementById('voltmeterNeedleGroup');
+            const voltmeterNeedle = document.getElementById('voltmeterNeedle');
+            const voltmeterArrowHead = document.getElementById('voltmeterArrowHead');
+            
+            // Wires
+            const wires = ['wire-bat-top', 'wire-top-left', 'switchArm', 'wire-top-right', 'wire-volt-top', 'wire-volt-bot', 'wire-bat-bot', 'wire-bottom'];
+
+            // Logic View
+            const logicBox1 = document.getElementById('logicBox1');
+            const logicDot1 = document.getElementById('logicDot1');
+            const logicBox0 = document.getElementById('logicBox0');
+            const logicDot0 = document.getElementById('logicDot0');
+
+            // Math View
+            const mathCoeffA = document.getElementById('mathCoeffA');
+            const mathVec1 = document.getElementById('mathVec1');
+            const mathCoeffB = document.getElementById('mathCoeffB');
+            const mathVec0 = document.getElementById('mathVec0');
+            const inputA = document.getElementById('inputA');
+            const inputB = document.getElementById('inputB');
+
+            if (bitState === 1) {
+                // STATE 1 (ON)
+                btn.innerHTML = `<span class="text-slate-400 mr-4 font-serif italic text-4xl">[B] =</span> [1]`;
+                cardSwitch.classList.add('border-green-500/50');
+                iconSwitch.innerHTML = '<i class="fa-solid fa-toggle-on"></i>';
+                iconSwitch.className = "w-10 h-10 rounded-xl bg-green-900/40 flex items-center justify-center text-green-400 text-lg transition-colors duration-300 icon-wrapper";
+                switchStateText.innerText = 'CLOSED';
+                switchStateText.className = 'panel-status-text text-2xl font-bold mono text-green-400 transition-colors duration-300';
+                desc.innerHTML = `<span class="text-green-400 font-bold">STATE 1</span> &nbsp;&middot;&nbsp; Circuit Closed`;
+
+                switchArmGroup.style.transform = 'translate(130px, 50px) rotate(0deg)';
+                voltmeterNeedleGroup.style.transform = 'rotate(45deg)';
+                voltmeterNeedle.setAttribute('stroke', '#22c55e');
+                voltmeterArrowHead.setAttribute('fill', '#22c55e');
+                wires.forEach(id => document.getElementById(id).setAttribute('class', 'glow-line'));
+
+                logicBox1.setAttribute('class', 'logic-box-active');
+                logicDot1.setAttribute('class', 'logic-active');
+                logicBox0.setAttribute('class', 'logic-box-inactive');
+                logicDot0.setAttribute('class', 'logic-inactive');
+
+                mathCoeffA.innerText = "1";
+                mathCoeffA.className = "math-num text-slate-600 text-3xl"; 
+                mathVec1.className = "font-bold font-mono text-green-400 scale-110 inline-block transition-all duration-300 cursor-pointer hover:opacity-80 select-none";
+                mathCoeffB.innerText = "0";
+                mathCoeffB.className = "math-num text-slate-600 text-3xl"; 
+                mathVec0.className = "font-bold font-mono text-slate-600 transition-all duration-300 cursor-pointer hover:opacity-80 select-none"; 
+                
+                inputA.value = "1";
+                inputB.value = "0";
+
+            } else {
+                // STATE 0 (OFF)
+                btn.innerHTML = `<span class="text-slate-400 mr-4 font-serif italic text-4xl">[B] =</span> [0]`;
+                cardSwitch.classList.remove('border-green-500/50');
+                iconSwitch.innerHTML = '<i class="fa-solid fa-toggle-off"></i>';
+                iconSwitch.className = "w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-slate-500 text-lg transition-colors duration-300 icon-wrapper";
+                switchStateText.innerText = 'OPEN';
+                switchStateText.className = 'panel-status-text text-2xl font-bold mono text-red-400 transition-colors duration-300';
+                desc.innerHTML = `<span class="text-slate-400 font-bold">STATE 0</span> &nbsp;&middot;&nbsp; Circuit Open`;
+
+                switchArmGroup.style.transform = 'translate(130px, 50px) rotate(-30deg)';
+                voltmeterNeedleGroup.style.transform = 'rotate(-45deg)';
+                voltmeterNeedle.setAttribute('stroke', '#ef4444');
+                voltmeterArrowHead.setAttribute('fill', '#ef4444');
+                
+                document.getElementById('wire-bat-top').setAttribute('class', 'neutral-line');
+                document.getElementById('wire-top-left').setAttribute('class', 'neutral-line');
+                document.getElementById('switchArm').setAttribute('class', 'off-line'); 
+                ['wire-top-right', 'wire-volt-top', 'wire-volt-bot', 'wire-bat-bot', 'wire-bottom'].forEach(id => {
+                    document.getElementById(id).setAttribute('class', 'neutral-line');
+                });
+
+                logicBox1.setAttribute('class', 'logic-box-inactive');
+                logicDot1.setAttribute('class', 'logic-inactive');
+                logicBox0.setAttribute('class', 'logic-box-active');
+                logicDot0.setAttribute('class', 'logic-active');
+
+                mathCoeffA.innerText = "0";
+                mathCoeffA.className = "math-num text-slate-600 text-3xl"; 
+                mathVec1.className = "font-bold font-mono text-slate-600 transition-all duration-300 cursor-pointer hover:opacity-80 select-none"; 
+                mathCoeffB.innerText = "1";
+                mathCoeffB.className = "math-num text-slate-600 text-3xl"; 
+                mathVec0.className = "font-bold font-mono text-green-400 scale-110 inline-block transition-all duration-300 cursor-pointer hover:opacity-80 select-none"; 
+                
+                inputA.value = "0";
+                inputB.value = "1";
+            }
+        }
+
+        // --- DRAG AND DROP PANELS ---
+        const draggables = document.querySelectorAll('.draggable-panel');
+        const container = document.getElementById('mainScroll');
+
+        draggables.forEach(draggable => {
+            draggable.addEventListener('dragstart', (e) => {
+                // Ensure we aren't dragging a gate
+                if(!e.target.classList.contains('gate-item')) {
+                    draggable.classList.add('dragging');
+                }
+            });
+            draggable.addEventListener('dragend', () => {
+                draggable.classList.remove('dragging');
+            });
+        });
+
+        container.addEventListener('dragover', e => {
+            e.preventDefault();
+            const draggingPanel = document.querySelector('.draggable-panel.dragging');
+            if (draggingPanel) {
+                const afterElement = getDragAfterElement(container, e.clientX);
+                if (afterElement == null) {
+                    container.appendChild(draggingPanel);
+                } else {
+                    container.insertBefore(draggingPanel, afterElement);
+                }
+            }
+        });
+
+        function getDragAfterElement(container, x) {
+            const draggableElements = [...container.querySelectorAll('.draggable-panel:not(.dragging)')];
+            return draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = x - box.left - box.width / 2;
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                } else {
+                    return closest;
+                }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
+
+        // Initialize All
+        updateUI();
+        updateDigitalUI(); // Init logic sim
+    </script>
+</body>
+</html>
