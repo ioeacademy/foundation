@@ -1,0 +1,1531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuCoin: Presentation Mode</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --slate-950: #020617;
+            --accent: #38bdf8;
+            --board-bg: #2f3e46;
+            --chalk-white: #f0f0f0;
+            --state-0: #3b82f6;
+            --state-1: #f97316;
+            --header-height: 130px; /* Default height */
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--slate-950);
+            color: #e2e8f0;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .chalkboard { font-family: 'Caveat', cursive; }
+
+        .blackboard-texture {
+            background-color: var(--board-bg);
+            background-image: 
+                url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.08'/%3E%3C/svg%3E"),
+                radial-gradient(circle at 50% 50%, rgba(255,255,255,0.02) 0%, transparent 60%);
+            background-size: cover, cover;
+        }
+
+        .algebra-step {
+            clip-path: inset(0 100% 0 0);
+            transition: clip-path 1.5s cubic-bezier(0.25, 1, 0.5, 1);
+            font-size: 1.5rem;
+            color: var(--chalk-white);
+            text-shadow: 0 0 1px rgba(255,255,255,0.8), 1px 1px 2px rgba(0,0,0,0.5);
+        }
+        .algebra-step.writing { clip-path: inset(0 0 0 0); }
+
+        .uniform-box {
+            width: 85vw;
+            height: 600px; 
+            flex-shrink: 0;
+            scroll-snap-align: center;
+            transition: width 0.4s ease, height 0.4s ease;
+        }
+        
+        /* Drag & Drop Styles */
+        .uniform-box.dragging {
+            opacity: 0.5;
+            transform: scale(0.98);
+            border: 2px dashed #38bdf8;
+            border-radius: 1.5rem;
+            cursor: grabbing;
+        }
+        /* Critical for smooth drag: disable pointer events on children while dragging */
+        .uniform-box.dragging * {
+            pointer-events: none;
+        }
+        
+        /* Make headers draggable handles */
+        .panel-header {
+            cursor: grab;
+        }
+        .panel-header:active {
+            cursor: grabbing;
+        }
+
+        @media (min-width: 768px) { .uniform-box { width: 650px; } }
+
+        .panel-card {
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(12px);
+            border: 1px solid #334155;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border-radius: 1.5rem;
+        }
+
+        /* Improved Collapsed State Logic */
+        .uniform-box.collapsed { width: 80px !important; height: 80px !important; }
+        .uniform-box.collapsed .panel-content, 
+        .uniform-box.collapsed .panel-header-text,
+        .uniform-box.collapsed #outcomeTag { display: none !important; } /* Hide outcome tag when collapsed to prevent layout shift */
+        .uniform-box.collapsed .panel-header { border: none !important; height: 100%; justify-content: center; padding: 0; }
+        /* Hide buttons when collapsed */
+        .uniform-box.collapsed .maximize-btn, .uniform-box.collapsed .minimize-btn { display: none; }
+
+        /* Maximized State Logic */
+        .uniform-box.maximized {
+            position: fixed;
+            top: var(--header-height); /* Starts below the header */
+            left: 0;
+            width: 100vw !important;
+            height: calc(100vh - var(--header-height)) !important; /* Fills remaining height */
+            z-index: 2000;
+            margin: 0;
+        }
+        .uniform-box.maximized .panel-card {
+            border-radius: 0;
+            border: none;
+            border-top: 1px solid #334155; /* Add visual separation */
+        }
+        /* Hide minimize button when maximized */
+        .uniform-box.maximized .minimize-btn {
+            display: none !important;
+        }
+
+        .bit-box-static {
+            background-color: #f8fafc;
+            color: #0f172a;
+            border: 4px solid #cbd5e1;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .prob-bar {
+            height: 24px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 8px;
+            overflow: hidden;
+            display: flex;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .prob-fill-0 { background: var(--state-0); transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+        .prob-fill-1 { background: var(--state-1); transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+
+        #three-tooltip {
+            position: absolute;
+            display: none;
+            background: rgba(15, 23, 42, 0.98);
+            color: var(--accent);
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--accent);
+            pointer-events: none;
+            z-index: 1000;
+            white-space: nowrap;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5);
+        }
+        
+        /* Custom number input styling */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button {  
+           opacity: 1;
+        }
+
+        /* Circuit specific styles */
+        .circuit-line { stroke: #94a3b8; stroke-width: 2; }
+        .gate-box { stroke: #e2e8f0; stroke-width: 2; rx: 0; fill: #1e293b; }
+        .gate-text { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 14px; text-anchor: middle; dominant-baseline: middle; fill: white; }
+
+        /* Floating stats panel animation */
+        .float-panel-enter { opacity: 1; transform: translateX(0); pointer-events: auto; }
+        .float-panel-exit { opacity: 0; transform: translateX(20px); pointer-events: none; }
+    </style>
+</head>
+<body class="flex flex-col">
+
+    <!-- RESIZABLE HEADER -->
+    <!-- Increased z-index to 3000 to stay above maximized panels -->
+    <header id="main-header" class="w-full bg-slate-900/80 backdrop-blur-md border-b border-slate-800 relative z-[3000] overflow-hidden" style="height: 130px; min-height: 80px;">
+        <div id="header-content-wrapper" class="w-full h-full p-4 sm:px-8 flex flex-col md:flex-row items-center justify-between gap-6 origin-left">
+            <div class="flex-shrink-0">
+                <div id="stateBtn" class="bit-box-static h-24 px-8 rounded-2xl flex flex-col items-center justify-center mono select-none border-b-8 border-slate-300">
+                    <span class="text-slate-500 font-serif italic text-xs uppercase tracking-widest">QUANTUM STATE</span>
+                    <span id="headerDirac" class="text-xl font-black tracking-tight">\( |\Psi\rangle = |0\rangle \)</span>
+                    <span id="headerStatus" class="text-[9px] font-bold uppercase tracking-widest text-emerald-600 mt-1">Collapsed</span>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-4">
+                <div class="text-right hidden sm:block">
+                    <h1 class="text-xl font-black text-white">QuCoin Presentation</h1>
+                    <!-- UPDATED HEADER INFO -->
+                    <div class="flex flex-col items-end mt-1">
+                        <p class="text-slate-500 text-[10px] font-bold">By G5</p>
+                        <a href="mailto:xxxx@yyy.com" class="text-blue-500 text-[10px] font-bold hover:text-blue-300 transition-colors">xxxx@yyy.com</a>
+                    </div>
+                </div>
+                
+                <div class="bg-slate-800 p-2 rounded-xl flex gap-2 border border-slate-700 items-center">
+                    <button onclick="app.applyGate('X')" class="w-10 h-10 rounded bg-blue-600/20 text-blue-400 border border-blue-600/40 font-bold hover:bg-blue-600/40 transition-all">X</button>
+                    <button onclick="app.applyGate('Y')" class="w-10 h-10 rounded bg-red-600/20 text-red-400 border border-red-600/40 font-bold hover:bg-red-600/40 transition-all">Y</button>
+                    <button onclick="app.applyGate('Z')" class="w-10 h-10 rounded bg-green-600/20 text-green-400 border border-green-600/40 font-bold hover:bg-green-600/40 transition-all">Z</button>
+                    <button onclick="app.applyGate('H')" class="w-10 h-10 rounded bg-purple-600/20 text-purple-400 border border-purple-600/40 font-bold hover:bg-purple-600/40 transition-all">H</button>
+                    
+                    <div class="w-px h-8 bg-slate-700 mx-1"></div>
+                    
+                    <!-- Measurement Controls -->
+                    <div class="flex items-center bg-slate-700/50 rounded-lg px-2 mr-1">
+                        <span class="text-xs text-slate-400 mr-2 font-bold mono">N=</span>
+                        <input id="numMeasInput" type="number" min="1" max="500" value="1" class="w-12 bg-transparent text-white font-mono text-sm focus:outline-none text-right font-bold" onchange="app.updateN(this.value)">
+                    </div>
+                    <button onclick="app.measure()" class="px-3 h-10 rounded bg-emerald-600/20 text-emerald-400 border border-emerald-600/40 font-bold hover:bg-emerald-600/40 transition-all">Measure</button>
+                    
+                    <div class="w-px h-8 bg-slate-700 mx-1"></div>
+                    <button onclick="app.reset()" class="w-10 h-10 rounded bg-slate-700 text-slate-300 hover:text-white transition-all"><i class="fa-solid fa-rotate-left"></i></button>
+                </div>
+            </div>
+        </div>
+        <!-- Header Resize Handle -->
+        <div id="header-handle" class="absolute bottom-0 left-0 w-full h-2 bg-blue-500/0 hover:bg-blue-500/50 cursor-row-resize z-[60] transition-colors"></div>
+    </header>
+
+    <main id="mainScroll" class="w-full flex-grow flex items-center overflow-x-auto overflow-y-hidden snap-x snap-mandatory px-4 sm:px-12 gap-8 pt-4">
+        
+        <!-- PANEL 1: PHYSICAL VIEW -->
+        <div id="panelPhysical" class="uniform-box" draggable="true">
+            <div class="panel-card">
+                <div class="panel-header flex items-center justify-between p-4 border-b border-slate-800 shrink-0 select-none cursor-pointer" onclick="app.toggleCollapse('panelPhysical')">
+                    <div class="flex items-center gap-4">
+                        <!-- Added shrink-0 to prevent squashing on resize -->
+                        <div class="w-10 h-10 shrink-0 rounded-xl bg-slate-900/50 flex items-center justify-center border border-slate-700 hover:scale-110 transition-all shadow-inner">
+                            <svg viewBox="0 0 100 100" class="w-7 h-7">
+                                <circle cx="50" cy="50" r="42" fill="#0f172a" stroke="#fbbf24" stroke-width="8" />
+                                <text x="50" y="56" font-family="'JetBrains Mono', monospace" font-weight="900" font-size="34" fill="#3b82f6" text-anchor="middle" dominant-baseline="middle">|0⟩</text>
+                            </svg>
+                        </div>
+                        <div class="panel-header-text">
+                            <div class="text-xs text-slate-500 font-bold uppercase tracking-widest">Physical View</div>
+                            <div class="text-sm text-slate-200 font-semibold italic">Magnetic Trap Simulation</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div id="outcomeTag" class="opacity-0 px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 rounded-full text-[10px] font-black uppercase tracking-widest transition-opacity duration-1000">Measured: |0⟩</div>
+                        <button class="minimize-btn w-8 h-8 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 flex items-center justify-center transition-all" onclick="event.stopPropagation(); app.toggleCollapse('panelPhysical')">
+                            <i class="fa-solid fa-minus"></i>
+                        </button>
+                        <button class="maximize-btn w-8 h-8 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 flex items-center justify-center transition-all" onclick="event.stopPropagation(); app.toggleMaximize('panelPhysical')">
+                            <i class="fa-solid fa-expand"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="panel-content flex-grow relative bg-slate-950/50">
+                    <div id="canvas-physical" class="w-full h-full cursor-grab active:cursor-grabbing"></div>
+                    
+                    <!-- NEW: Floating Stats Panel (Top Right) -->
+                    <div id="float-stats-panel" class="float-panel-exit absolute top-4 right-4 bg-slate-900/90 backdrop-blur-xl p-4 rounded-xl border border-slate-700 shadow-2xl flex flex-col gap-2 transition-all duration-500 z-10 w-40">
+                        <div class="text-[10px] text-emerald-400 font-black uppercase tracking-widest text-center border-b border-slate-700 pb-2 mb-1">
+                            Experimental<br>
+                            <span class="text-slate-500 text-[9px] font-normal">N = <span id="floatLblN">1</span></span>
+                        </div>
+                        <div class="flex items-end justify-center gap-3 h-32 w-full pt-2">
+                            <!-- Bar 0 -->
+                            <div class="flex flex-col items-center gap-1 w-1/2 h-full">
+                                <span id="float-val-0" class="text-[10px] font-mono text-blue-300 font-bold h-4">0</span>
+                                <div class="relative w-full bg-slate-800/50 rounded-md overflow-hidden flex-grow border border-slate-700/50">
+                                    <!-- REMOVED pt-1 here to fix 0% line issue -->
+                                    <div id="float-bar-0" class="absolute bottom-0 w-full bg-blue-500 transition-all duration-700 flex items-start justify-center" style="height: 0%">
+                                         <span id="float-pct-0" class="text-[9px] font-bold text-white drop-shadow-md mix-blend-plus-lighter opacity-0">0%</span>
+                                    </div>
+                                </div>
+                                <span class="text-xs font-bold text-slate-500">|0⟩</span>
+                            </div>
+                            <!-- Bar 1 -->
+                            <div class="flex flex-col items-center gap-1 w-1/2 h-full">
+                                <span id="float-val-1" class="text-[10px] font-mono text-orange-300 font-bold h-4">0</span>
+                                <div class="relative w-full bg-slate-800/50 rounded-md overflow-hidden flex-grow border border-slate-700/50">
+                                    <!-- REMOVED pt-1 here to fix 0% line issue -->
+                                    <div id="float-bar-1" class="absolute bottom-0 w-full bg-orange-500 transition-all duration-700 flex items-start justify-center" style="height: 0%">
+                                        <span id="float-pct-1" class="text-[9px] font-bold text-white drop-shadow-md mix-blend-plus-lighter opacity-0">0%</span>
+                                    </div>
+                                </div>
+                                <span class="text-xs font-bold text-slate-500">|1⟩</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="absolute bottom-4 left-4 right-4 bg-slate-900/95 backdrop-blur-xl p-4 rounded-2xl border border-slate-800 shadow-2xl flex flex-col gap-3 pointer-events-none">
+                        <!-- Theoretical Bar Only -->
+                        <div class="flex justify-between items-center text-xs font-bold uppercase tracking-widest mb-1">
+                            <span class="text-blue-400">Prob(|0⟩) <span id="p0-num" class="text-base text-white">100%</span></span>
+                            <span class="text-slate-500 text-[10px]">Theoretical [|α|²]</span>
+                            <span class="text-orange-400">Prob(|1⟩) <span id="p1-num" class="text-base text-white">0%</span></span>
+                        </div>
+                        <div class="prob-bar">
+                            <div id="bar0" class="prob-fill-0" style="width: 100%"></div>
+                            <div id="bar1" class="prob-fill-1" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PANEL 2: GRAPHICAL VIEW -->
+        <div id="panelGraphical" class="uniform-box" draggable="true">
+            <div class="panel-card">
+                <div class="panel-header flex items-center justify-between p-4 border-b border-slate-800 shrink-0 select-none cursor-pointer" onclick="app.toggleCollapse('panelGraphical')">
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-500 hover:scale-110 transition-all">
+                            <i class="fa-solid fa-globe"></i>
+                        </div>
+                        <div class="panel-header-text">
+                            <div class="text-xs text-slate-500 font-bold uppercase tracking-widest">Graphical View</div>
+                            <div class="text-sm text-slate-200 font-semibold">Bloch Sphere Geometry</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button class="minimize-btn w-8 h-8 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 flex items-center justify-center transition-all" onclick="event.stopPropagation(); app.toggleCollapse('panelGraphical')">
+                            <i class="fa-solid fa-minus"></i>
+                        </button>
+                        <button class="maximize-btn w-8 h-8 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 flex items-center justify-center transition-all" onclick="event.stopPropagation(); app.toggleMaximize('panelGraphical')">
+                            <i class="fa-solid fa-expand"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="panel-content flex-grow relative bg-slate-900/20">
+                    <div id="canvas-bloch" class="w-full h-full cursor-grab active:cursor-grabbing"></div>
+                    <!-- Collapsing Overlay -->
+                    <div id="bloch-collapse-overlay" class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-0 transition-opacity duration-100">
+                        <div class="bg-red-600/90 text-white font-black text-2xl px-6 py-3 rounded-xl tracking-widest shadow-[0_0_30px_rgba(220,38,38,0.6)] animate-pulse">COLLAPSING...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PANEL 3: CIRCUIT VIEW -->
+        <div id="panelCircuit" class="uniform-box" draggable="true">
+            <div class="panel-card bg-slate-900 border-slate-700">
+                <div class="panel-header flex items-center justify-between p-4 border-b border-slate-800 shrink-0 select-none cursor-pointer" onclick="app.toggleCollapse('panelCircuit')">
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500 hover:scale-110 transition-all">
+                            <i class="fa-solid fa-diagram-project"></i>
+                        </div>
+                        <div class="panel-header-text">
+                            <div class="text-xs text-slate-500 font-bold uppercase tracking-widest">Circuit View</div>
+                            <div class="text-sm text-slate-200 font-semibold">Quantum Algorithm Log</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button class="minimize-btn w-8 h-8 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 flex items-center justify-center transition-all" onclick="event.stopPropagation(); app.toggleCollapse('panelCircuit')">
+                            <i class="fa-solid fa-minus"></i>
+                        </button>
+                        <button class="maximize-btn w-8 h-8 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 flex items-center justify-center transition-all" onclick="event.stopPropagation(); app.toggleMaximize('panelCircuit')">
+                            <i class="fa-solid fa-expand"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="panel-content flex-grow flex flex-col relative overflow-hidden bg-slate-950/30">
+                    <!-- Top: Circuit -->
+                    <div class="h-2/5 w-full overflow-x-auto flex items-center p-4 border-b border-slate-800" id="circuit-scroll">
+                        <div id="circuit-container" class="min-w-full h-full flex items-center"></div>
+                    </div>
+                    <!-- Bottom: Vertical Histogram -->
+                    <div class="h-3/5 w-full p-6 flex flex-col justify-center items-center gap-2 bg-slate-900/40" id="histogram-container">
+                        <div class="flex items-end justify-center gap-12 h-48 w-full pb-2 relative">
+                            <!-- Bar 0 -->
+                            <div class="flex flex-col items-center gap-3 relative z-10">
+                                <span class="text-lg font-bold text-blue-400 font-mono" id="hist-val-0">100%</span>
+                                <div class="relative w-16 h-36 bg-slate-800/50 rounded-lg overflow-hidden border border-slate-700/50 shadow-inner">
+                                    <div id="hist-bar-0" class="absolute bottom-0 w-full bg-gradient-to-t from-blue-600 via-blue-500 to-blue-400 transition-all duration-300" style="height: 100%;"></div>
+                                </div>
+                                <span class="text-lg font-bold text-slate-400 font-mono tracking-wider">|0⟩</span>
+                            </div>
+                            <!-- Bar 1 -->
+                            <div class="flex flex-col items-center gap-3 relative z-10">
+                                <span class="text-lg font-bold text-orange-400 font-mono" id="hist-val-1">0%</span>
+                                <div class="relative w-16 h-36 bg-slate-800/50 rounded-lg overflow-hidden border border-slate-700/50 shadow-inner">
+                                    <div id="hist-bar-1" class="absolute bottom-0 w-full bg-gradient-to-t from-orange-600 via-orange-500 to-orange-400 transition-all duration-300" style="height: 0%;"></div>
+                                </div>
+                                <span class="text-lg font-bold text-slate-400 font-mono tracking-wider">|1⟩</span>
+                            </div>
+                            
+                            <!-- Grid lines -->
+                            <div class="absolute inset-x-12 border-b border-slate-700/30 pointer-events-none" style="bottom: 40px"></div>
+                            <div class="absolute inset-x-12 border-b border-slate-700/30 pointer-events-none" style="bottom: 112px"></div>
+                        </div>
+                        <div class="text-center text-[10px] uppercase tracking-widest text-slate-600 font-bold mt-2">Measurement Probability Distribution</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PANEL 4: DIRAC (Formerly Calc) VIEW -->
+        <div id="panelCalc" class="uniform-box" draggable="true">
+            <div class="panel-card blackboard-texture border-slate-600">
+                <div class="panel-header flex items-center justify-between p-4 border-b border-white/10 shrink-0 select-none cursor-pointer" onclick="app.toggleCollapse('panelCalc')">
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-white hover:scale-110 transition-all">
+                            <!-- Custom Ket Icon -->
+                            <svg viewBox="0 0 100 100" class="w-6 h-6 fill-current">
+                                <text x="50" y="65" font-family="'JetBrains Mono', monospace" font-weight="900" font-size="60" text-anchor="middle">|Ψ⟩</text>
+                            </svg>
+                        </div>
+                        <div class="panel-header-text">
+                            <div class="text-xs text-slate-300 font-bold uppercase tracking-widest chalkboard">Dirac. Shut up and Calculate</div>
+                            <div class="text-sm text-slate-100 font-semibold">Bra-Ket Notation</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button class="minimize-btn w-8 h-8 rounded-lg bg-white/10 text-slate-300 hover:text-white hover:bg-white/20 flex items-center justify-center transition-all" onclick="event.stopPropagation(); app.toggleCollapse('panelCalc')">
+                            <i class="fa-solid fa-minus"></i>
+                        </button>
+                        <button class="maximize-btn w-8 h-8 rounded-lg bg-white/10 text-slate-300 hover:text-white hover:bg-white/20 flex items-center justify-center transition-all" onclick="event.stopPropagation(); app.toggleMaximize('panelCalc')">
+                            <i class="fa-solid fa-expand"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="panel-content flex-grow overflow-y-auto p-8 space-y-8" id="blackboard-scroll">
+                    <div id="calc-steps-container" class="chalkboard"></div>
+                    <div id="calc-placeholder" class="text-center text-white/10 italic chalkboard text-2xl p-20">No operations performed...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PANEL 5: HEISENBERG (Matrix) VIEW -->
+        <div id="panelMatrix" class="uniform-box" draggable="true">
+            <div class="panel-card blackboard-texture border-slate-600">
+                <div class="panel-header flex items-center justify-between p-4 border-b border-white/10 shrink-0 select-none cursor-pointer" onclick="app.toggleCollapse('panelMatrix')">
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-white hover:scale-110 transition-all">
+                            <!-- Custom Matrix Icon -->
+                            <svg viewBox="0 0 100 100" class="w-6 h-6 fill-current stroke-current" stroke-width="4">
+                                <path d="M 20 20 L 10 20 L 10 80 L 20 80 M 80 20 L 90 20 L 90 80 L 80 80" fill="none" />
+                                <circle cx="35" cy="35" r="5" fill="currentColor" stroke="none" />
+                                <circle cx="65" cy="65" r="5" fill="currentColor" stroke="none" />
+                                <rect x="30" y="60" width="10" height="10" fill="none" />
+                                <rect x="60" y="30" width="10" height="10" fill="none" />
+                            </svg>
+                        </div>
+                        <div class="panel-header-text">
+                            <div class="text-xs text-slate-300 font-bold uppercase tracking-widest chalkboard">Heisenberg. Shut Up and Calculate</div>
+                            <div class="text-sm text-slate-100 font-semibold">Matrix Notation</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button class="minimize-btn w-8 h-8 rounded-lg bg-white/10 text-slate-300 hover:text-white hover:bg-white/20 flex items-center justify-center transition-all" onclick="event.stopPropagation(); app.toggleCollapse('panelMatrix')">
+                            <i class="fa-solid fa-minus"></i>
+                        </button>
+                        <button class="maximize-btn w-8 h-8 rounded-lg bg-white/10 text-slate-300 hover:text-white hover:bg-white/20 flex items-center justify-center transition-all" onclick="event.stopPropagation(); app.toggleMaximize('panelMatrix')">
+                            <i class="fa-solid fa-expand"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="panel-content flex-grow overflow-y-auto p-8 space-y-8" id="matrix-scroll">
+                    <div id="matrix-steps-container" class="chalkboard"></div>
+                    <div id="matrix-placeholder" class="text-center text-white/10 italic chalkboard text-2xl p-20">No operations performed...</div>
+                </div>
+            </div>
+        </div>
+        
+    </main>
+
+    <!-- TUTORIAL OVERLAY -->
+    <div id="tutorial-overlay" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm hidden opacity-0 transition-opacity duration-500">
+        <div class="bg-slate-900 border border-slate-700 p-8 rounded-3xl shadow-2xl max-w-2xl mx-4 transform scale-95 transition-transform duration-300 w-full" id="tutorial-card">
+            <!-- Dynamic Content Injected Here -->
+        </div>
+    </div>
+
+    <div id="three-tooltip"></div>
+
+    <script>
+        class Complex {
+            constructor(re, im = 0) { this.re = re; this.im = im; }
+            add(c) { return new Complex(this.re + c.re, this.im + c.im); }
+            sub(c) { return new Complex(this.re - c.re, this.im - c.im); }
+            mul(c) {
+                if (c instanceof Complex) return new Complex(this.re*c.re - this.im*c.im, this.re*c.im + this.im*c.re);
+                return new Complex(this.re * c, this.im * c);
+            }
+            magSq() { return this.re * this.re + this.im * this.im; }
+            mag() { return Math.sqrt(this.magSq()); }
+            
+            toLatex() {
+                const snap = (n) => Math.abs(n) < 0.0001 ? 0 : n;
+                const re = snap(this.re);
+                const im = snap(this.im);
+                if (re === 0 && im === 0) return "0";
+                
+                const formatVal = (val, isIm) => {
+                    const absVal = Math.abs(val);
+                    let s = "";
+                    if (Math.abs(absVal - 0.7071) < 0.005) s = "\\frac{1}{\\sqrt{2}}";
+                    else if (Math.abs(absVal - 1) < 0.0005) s = isIm ? "" : "1";
+                    else if (Math.abs(absVal) < 0.0005) s = "0";
+                    else s = absVal.toFixed(3); // Changed to 3 decimals
+                    
+                    if (isIm) {
+                        if (s === "\\frac{1}{\\sqrt{2}}") s = "\\frac{i}{\\sqrt{2}}";
+                        else if (s === "") s = "i";
+                        else if (s === "0") s = ""; // Don't print 0i
+                        else s += "i";
+                    }
+                    if (val < 0 && s !== "0" && s !== "") return "-" + s;
+                    return s;
+                };
+
+                if (im === 0) return formatVal(re, false);
+                if (re === 0) return formatVal(im, true);
+                const reStr = formatVal(re, false);
+                const imStr = formatVal(im, true);
+                const op = (im > 0) ? "+" : ""; 
+                return `(${reStr}${op}${imStr})`;
+            }
+        }
+
+        class QuApp {
+            constructor() {
+                this.FLOAT_Y = 1.8;
+                this.ORIGIN_Y = 0;
+                this.state = {
+                    alpha: new Complex(1, 0),
+                    beta: new Complex(0, 0),
+                    dragStartAlpha: new Complex(1, 0), // Added for laser history
+                    dragStartBeta: new Complex(0, 0),  // Added for laser history
+                    rotation: new THREE.Quaternion(),
+                    targetRotation: new THREE.Quaternion(),
+                    currentY: this.FLOAT_Y,
+                    targetY: this.FLOAT_Y,
+                    vy: 0, // Vertical Velocity for physics
+                    activeLaser: null,
+                    trailHistory: [],
+                    isMeasuring: false,
+                    isCollapsing: false,
+                    collapseAmplitudes: {0:0, 1:0},
+                    numMeasurements: 1,
+                    droppedCoins: [], 
+                    circuitHistory: [], 
+                    laserAccumulatedAngle: 0,
+                    gateQueue: [],
+                    isAnimatingGate: false,
+                    currentGate: null,
+                    gateProgress: 0,
+                    tutorialStep: 0 // New Tutorial State
+                };
+                
+                this.tutorialSteps = [
+                    {
+                        title: "Welcome to QuCoin",
+                        content: `<p class="text-slate-400 mb-4">Your interactive laboratory for inclusive education in Quantum Science and Technologies.</p>
+                                  <div class="bg-blue-900/30 p-4 rounded-xl border border-blue-500/30 mb-6">
+                                    <p class="text-blue-300 font-bold mb-1"><i class="fa-solid fa-quote-left mr-2"></i>Mission</p>
+                                    <p class="text-slate-300 italic">"Facilitate Inclusive Education in Quantum Science and Technologies"</p>
+                                    <p class="text-slate-500 text-xs mt-2 text-right">- By G5</p>
+                                  </div>`,
+                        icon: "fa-graduation-cap"
+                    },
+                    {
+                        title: "The Controls",
+                        content: `<p class="text-slate-400 mb-4">Master the quantum state with the top toolbar.</p>
+                                  <ul class="space-y-3 text-sm text-slate-300">
+                                    <li class="flex gap-3 items-center"><span class="bg-slate-800 px-2 py-1 rounded text-white font-mono">Gates</span> Apply X, Y, Z, and Hadamard (H) gates to transform the qubit.</li>
+                                    <li class="flex gap-3 items-center"><span class="bg-slate-800 px-2 py-1 rounded text-white font-mono">Measure</span> Collapse the wavefunction. Change <b>N</b> to run ensemble experiments.</li>
+                                    <li class="flex gap-3 items-center"><span class="bg-slate-800 px-2 py-1 rounded text-white font-mono">Reset</span> Clear all history and return to |0⟩.</li>
+                                    <li class="flex gap-3 items-center"><span class="bg-blue-500/20 text-blue-400 px-2 py-1 rounded font-bold">Resize</span> Drag the blue line at the bottom of the header to scale the interface!</li>
+                                  </ul>`,
+                        icon: "fa-sliders"
+                    },
+                    {
+                        title: "The Views",
+                        content: `<p class="text-slate-400 mb-4">Visualize quantum mechanics in multiple dimensions.</p>
+                                  <div class="grid grid-cols-2 gap-4 text-sm">
+                                    <div class="bg-slate-800/50 p-3 rounded-lg"><strong class="text-blue-400 block mb-1">Physical</strong>See the "Quantum Coin" in a magnetic trap. Watch it float in superposition or fall upon measurement.</div>
+                                    <div class="bg-slate-800/50 p-3 rounded-lg"><strong class="text-purple-400 block mb-1">Graphical</strong>The Bloch Sphere. A geometric representation of the qubit state vector.</div>
+                                    <div class="bg-slate-800/50 p-3 rounded-lg"><strong class="text-orange-400 block mb-1">Circuit</strong>A standard quantum circuit diagram tracking your algorithm's history.</div>
+                                    <div class="bg-slate-800/50 p-3 rounded-lg"><strong class="text-emerald-400 block mb-1">Math</strong>See the "Shut Up and Calculate" logs in both Dirac (Bra-Ket) and Heisenberg (Matrix) notations.</div>
+                                  </div>`,
+                        icon: "fa-eye"
+                    },
+                    {
+                        title: "Interaction",
+                        content: `<p class="text-slate-400 mb-4">The lab is fully interactive!</p>
+                                  <ul class="space-y-3 text-sm text-slate-300">
+                                    <li class="flex gap-3 items-center"><i class="fa-solid fa-computer-mouse text-blue-400"></i> <b>Drag Panels</b> left or right to reorder your workspace.</li>
+                                    <li class="flex gap-3 items-center"><i class="fa-solid fa-expand text-blue-400"></i> <b>Maximize</b> any block to focus, or <b>Minimize</b> (-) to save space.</li>
+                                    <li class="flex gap-3 items-center"><i class="fa-solid fa-wand-magic-sparkles text-blue-400"></i> <b>Lasers</b> In Physical view, click and drag the colored lasers to manually rotate the qubit!</li>
+                                  </ul>`,
+                        icon: "fa-hand-pointer"
+                    },
+                    {
+                        title: "Shortcuts",
+                        content: `<p class="text-slate-400 mb-4">Power user controls for rapid experimentation.</p>
+                                  <div class="flex flex-wrap gap-2 justify-center">
+                                    <span class="bg-slate-800 text-white px-3 py-1 rounded font-mono border border-slate-700">X</span>
+                                    <span class="bg-slate-800 text-white px-3 py-1 rounded font-mono border border-slate-700">Y</span>
+                                    <span class="bg-slate-800 text-white px-3 py-1 rounded font-mono border border-slate-700">Z</span>
+                                    <span class="bg-slate-800 text-white px-3 py-1 rounded font-mono border border-slate-700">H</span>
+                                    <span class="bg-slate-800 text-white px-3 py-1 rounded font-mono border border-slate-700">Space (Measure)</span>
+                                    <span class="bg-slate-800 text-white px-3 py-1 rounded font-mono border border-slate-700">Enter (Reset)</span>
+                                  </div>
+                                  <p class="text-slate-500 text-center mt-6 italic">Ready to explore the quantum realm?</p>`,
+                        icon: "fa-keyboard"
+                    }
+                ];
+
+                this.raycaster = new THREE.Raycaster();
+                this.mouseLast = { x: 0, y: 0 };
+                this.isDraggingP = false;
+                this.isDraggingB = false;
+                this.initVisuals();
+                this.setupDragAndDrop();
+                this.setupHeaderResize();
+                this.setupKeyboardControls();
+                this.updateUI();
+                this.logInitialState();
+                this.updateCircuitUI(); 
+                this.updateHistogram();
+                this.checkTutorial();
+                this.animate();
+            }
+
+            toggleMaximize(id) {
+                const el = document.getElementById(id);
+                el.classList.toggle('maximized');
+                
+                // Update icon
+                const btn = el.querySelector('.maximize-btn i');
+                if (el.classList.contains('maximized')) {
+                    btn.classList.remove('fa-expand');
+                    btn.classList.add('fa-compress');
+                } else {
+                    btn.classList.remove('fa-compress');
+                    btn.classList.add('fa-expand');
+                }
+                
+                // Trigger resize for Three.js canvases
+                setTimeout(() => this.onResize(), 100);
+            }
+
+            setupHeaderResize() {
+                const header = document.getElementById('main-header');
+                const handle = document.getElementById('header-handle');
+                const content = document.getElementById('header-content-wrapper');
+                let isResizing = false;
+                let startY = 0;
+                let startHeight = 0;
+                const baseHeight = 130; // Matches initial style height
+
+                // Initialize CSS variable
+                document.documentElement.style.setProperty('--header-height', `${baseHeight}px`);
+
+                handle.addEventListener('mousedown', (e) => {
+                    isResizing = true;
+                    startY = e.clientY;
+                    startHeight = header.offsetHeight;
+                    document.body.style.cursor = 'row-resize';
+                    e.preventDefault(); 
+                });
+
+                window.addEventListener('mousemove', (e) => {
+                    if (!isResizing) return;
+                    // Limit min height to 80px and max height to 400px
+                    const newHeight = Math.min(400, Math.max(80, startHeight + (e.clientY - startY)));
+                    header.style.height = `${newHeight}px`;
+                    
+                    // Update CSS variable for maximized panels
+                    document.documentElement.style.setProperty('--header-height', `${newHeight}px`);
+                    
+                    // Calculate Scale
+                    const scale = newHeight / baseHeight;
+                    
+                    // Apply Scale
+                    content.style.transform = `scale(${scale})`;
+                    content.style.transformOrigin = 'left center'; // Scale from left
+                    content.style.width = `${100 / scale}%`; // Compensate width so it fills container
+                });
+
+                window.addEventListener('mouseup', () => {
+                    if (isResizing) {
+                        isResizing = false;
+                        document.body.style.cursor = 'default';
+                    }
+                });
+            }
+
+            checkTutorial() {
+                if (!localStorage.getItem('qucoin_tutorial_seen_v2')) {
+                    this.state.tutorialStep = 0;
+                    this.updateTutorialUI();
+                    const overlay = document.getElementById('tutorial-overlay');
+                    overlay.classList.remove('hidden');
+                    requestAnimationFrame(() => {
+                        overlay.classList.remove('opacity-0');
+                        document.getElementById('tutorial-card').classList.remove('scale-95');
+                        document.getElementById('tutorial-card').classList.add('scale-100');
+                    });
+                }
+            }
+
+            updateTutorialUI() {
+                const stepData = this.tutorialSteps[this.state.tutorialStep];
+                const totalSteps = this.tutorialSteps.length;
+                const isLast = this.state.tutorialStep === totalSteps - 1;
+                const isFirst = this.state.tutorialStep === 0;
+
+                const html = `
+                    <div class="flex justify-center mb-6">
+                        <div class="w-16 h-16 bg-blue-500/20 rounded-2xl flex items-center justify-center text-blue-400 text-3xl">
+                            <i class="fa-solid ${stepData.icon}"></i>
+                        </div>
+                    </div>
+                    <h2 class="text-2xl font-black text-white text-center mb-2 tracking-tight">${stepData.title}</h2>
+                    
+                    <div class="mb-8 min-h-[120px]">
+                        ${stepData.content}
+                    </div>
+
+                    <div class="flex justify-between items-center gap-4">
+                        <div class="flex gap-1">
+                            ${this.tutorialSteps.map((_, i) => `
+                                <div class="w-2 h-2 rounded-full ${i === this.state.tutorialStep ? 'bg-blue-500' : 'bg-slate-700'}"></div>
+                            `).join('')}
+                        </div>
+                        <div class="flex gap-3">
+                            ${!isFirst ? `<button onclick="app.prevTutorialStep()" class="px-4 py-2 text-slate-400 hover:text-white font-bold transition-colors">Back</button>` : ''}
+                            <button onclick="${isLast ? 'app.closeTutorial()' : 'app.nextTutorialStep()'}" class="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition-all shadow-lg shadow-blue-500/20 active:scale-95">
+                                ${isLast ? 'Get Started' : 'Next'}
+                            </button>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('tutorial-card').innerHTML = html;
+            }
+
+            nextTutorialStep() {
+                if (this.state.tutorialStep < this.tutorialSteps.length - 1) {
+                    this.state.tutorialStep++;
+                    this.updateTutorialUI();
+                }
+            }
+
+            prevTutorialStep() {
+                if (this.state.tutorialStep > 0) {
+                    this.state.tutorialStep--;
+                    this.updateTutorialUI();
+                }
+            }
+
+            closeTutorial() {
+                const overlay = document.getElementById('tutorial-overlay');
+                overlay.classList.add('opacity-0');
+                setTimeout(() => {
+                    overlay.classList.add('hidden');
+                }, 500);
+                localStorage.setItem('qucoin_tutorial_seen_v2', 'true');
+            }
+
+            setupKeyboardControls() {
+                window.addEventListener('keydown', (e) => {
+                    if (['Space', 'KeyX', 'KeyY', 'KeyZ', 'KeyH', 'Enter'].includes(e.code)) e.preventDefault(); 
+                    if (e.code === 'Space') this.measure();
+                    else if (e.code === 'KeyX') this.applyGate('X');
+                    else if (e.code === 'KeyY') this.applyGate('Y');
+                    else if (e.code === 'KeyZ') this.applyGate('Z');
+                    else if (e.code === 'KeyH') this.applyGate('H');
+                    else if (e.code === 'Enter') this.reset();
+                });
+            }
+
+            initVisuals() {
+                const containerP = document.getElementById('canvas-physical');
+                this.sceneP = new THREE.Scene();
+                this.cameraP = new THREE.PerspectiveCamera(45, containerP.clientWidth/containerP.clientHeight, 0.1, 100);
+                this.cameraP.position.set(10, 7, 10);
+                this.cameraTargetP = new THREE.Vector3(0, 1.0, 0);
+                this.cameraP.lookAt(this.cameraTargetP);
+                this.rendererP = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+                this.rendererP.setSize(containerP.clientWidth, containerP.clientHeight);
+                containerP.appendChild(this.rendererP.domElement);
+
+                const tinyCoinGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.05, 16);
+                const createCoinFace = (txt, bg, fg) => {
+                    const c = document.createElement('canvas'); c.width=256; c.height=256;
+                    const x = c.getContext('2d');
+                    x.fillStyle = bg; x.beginPath(); x.arc(128,128,125,0,6.28); x.fill();
+                    x.lineWidth = 15; x.strokeStyle = '#fbbf24'; x.stroke();
+                    x.fillStyle = fg; x.font = 'bold 100px Arial'; x.textAlign = 'center'; x.textBaseline = 'middle';
+                    x.fillText(txt,128,128);
+                    return new THREE.CanvasTexture(c);
+                };
+
+                const tex0 = createCoinFace('|0⟩', '#0f172a', '#3b82f6');
+                const tex1 = createCoinFace('|1⟩', '#0f172a', '#f97316');
+                const mat0 = [new THREE.MeshStandardMaterial({color: 0xd97706}), new THREE.MeshStandardMaterial({map: tex0}), new THREE.MeshStandardMaterial({map: tex0})];
+                const mat1 = [new THREE.MeshStandardMaterial({color: 0xd97706}), new THREE.MeshStandardMaterial({map: tex1}), new THREE.MeshStandardMaterial({map: tex1})];
+
+                this.coinsMesh0 = new THREE.InstancedMesh(tinyCoinGeo, mat0, 500);
+                this.coinsMesh1 = new THREE.InstancedMesh(tinyCoinGeo, mat1, 500);
+                this.sceneP.add(this.coinsMesh0, this.coinsMesh1);
+
+                const coinGroup = new THREE.Group();
+                const coinGeo = new THREE.CylinderGeometry(1.8, 1.8, 0.3, 64);
+                const coinMat = [new THREE.MeshStandardMaterial({color: 0xd97706, metalness: 0.9, roughness: 0.2}), new THREE.MeshStandardMaterial({map: tex0}), new THREE.MeshStandardMaterial({map: tex1})];
+                this.coin = new THREE.Mesh(coinGeo, coinMat);
+                coinGroup.add(this.coin);
+
+                const normalShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.8, 8), new THREE.MeshBasicMaterial({color: 0xffff00}));
+                normalShaft.position.y = 0.55;
+                const normalTip = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.2, 16), new THREE.MeshBasicMaterial({color: 0xffff00}));
+                normalTip.position.y = 1.0;
+                this.coinNormal = new THREE.Group();
+                this.coinNormal.add(normalShaft, normalTip);
+                coinGroup.add(this.coinNormal);
+                this.coinSystem = coinGroup;
+                this.sceneP.add(this.coinSystem);
+
+                const trapGeo = new THREE.BoxGeometry(6, 2.5, 6); 
+                const trapEdges = new THREE.EdgesGeometry(trapGeo);
+                const trapMat = new THREE.LineBasicMaterial({color: 0x38bdf8, transparent: true, opacity: 0.6}); 
+                this.trap = new THREE.LineSegments(trapEdges, trapMat);
+                this.trap.position.y = this.FLOAT_Y;
+                this.sceneP.add(this.trap);
+                
+                // Changing specific colors to a uniform neutral color
+                const neutralColor = 0x64748b; // A nice slate-500
+                const axes = [{ dir: [1,0,0], color: neutralColor, label: 'Y' }, { dir: [0,1,0], color: neutralColor, label: 'Z' }, { dir: [0,0,1], color: neutralColor, label: 'X' }];
+                axes.forEach(a => {
+                    const dir = new THREE.Vector3(...a.dir);
+                    // Reduced arrow head size multiplier from 0.15/0.1 to 0.1/0.05
+                    this.sceneP.add(new THREE.ArrowHelper(dir, new THREE.Vector3(0,0,0), 7, a.color, 0.1 * 7, 0.05 * 7));
+                    const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 128;
+                    const ctx = canvas.getContext('2d'); ctx.font = 'bold 80px Inter'; ctx.fillStyle = '#64748b';
+                    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(a.label, 64, 64);
+                    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true }));
+                    sprite.position.copy(dir.clone().multiplyScalar(7 + 0.5)); sprite.scale.set(0.6, 0.6, 1);
+                    this.sceneP.add(sprite);
+                });
+
+                this.lasers = [
+                    this.createLaser(0x10b981, new THREE.Vector3(0, this.FLOAT_Y, -8.5), 'X', this.sceneP),
+                    this.createLaser(0x3b82f6, new THREE.Vector3(-8.5, this.FLOAT_Y, 0), 'Y', this.sceneP),
+                    this.createLaser(0x8b5cf6, new THREE.Vector3(0, -3, 0), 'Z', this.sceneP)
+                ];
+
+                this.sceneP.add(new THREE.AmbientLight(0xffffff, 0.4));
+                const dLight = new THREE.DirectionalLight(0xffffff, 1.2);
+                dLight.position.set(10, 20, 10);
+                this.sceneP.add(dLight);
+
+                const containerB = document.getElementById('canvas-bloch');
+                this.sceneB = new THREE.Scene();
+                this.cameraB = new THREE.PerspectiveCamera(45, containerB.clientWidth/containerB.clientHeight, 0.1, 100);
+                this.cameraB.position.set(5, 3, 5);
+                this.cameraB.lookAt(new THREE.Vector3(0, 0, 0));
+                this.rendererB = new THREE.WebGLRenderer({antialias: true, alpha: true});
+                this.rendererB.setSize(containerB.clientWidth, containerB.clientHeight);
+                containerB.appendChild(this.rendererB.domElement);
+
+                const sphere = new THREE.Mesh(new THREE.SphereGeometry(2, 32, 32), new THREE.MeshBasicMaterial({color: 0x475569, wireframe: true, transparent: true, opacity: 0.15}));
+                this.sceneB.add(sphere);
+                
+                // Changing specific colors to a uniform neutral color
+                const neutralColorB = 0x64748b; // A nice slate-500
+                const axesB = [{ dir: [1,0,0], color: neutralColorB, label: 'Y' }, { dir: [0,1,0], color: neutralColorB, label: 'Z' }, { dir: [0,0,1], color: neutralColorB, label: 'X' }];
+                axesB.forEach(a => {
+                    const dir = new THREE.Vector3(...a.dir);
+                    // Reduced arrow head size multiplier from 0.15/0.1 to 0.1/0.05
+                    this.sceneB.add(new THREE.ArrowHelper(dir, new THREE.Vector3(0,0,0), 2.5, a.color, 0.1 * 2.5, 0.05 * 2.5));
+                    const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 128;
+                    const ctx = canvas.getContext('2d'); ctx.font = 'bold 80px Inter'; ctx.fillStyle = '#64748b';
+                    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(a.label, 64, 64);
+                    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true }));
+                    sprite.position.copy(dir.clone().multiplyScalar(2.5 + 0.5)); sprite.scale.set(0.5, 0.5, 1);
+                    this.sceneB.add(sprite);
+                });
+                
+                // ADDED: Pole labels for |0> and |1>
+                this.addPoleLabels(this.sceneB, 2);
+
+                this.arrow = new THREE.Group();
+                const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.8, 8), new THREE.MeshBasicMaterial({color: 0xffffff}));
+                shaft.position.y = 0.9;
+                const tip = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.2, 16), new THREE.MeshBasicMaterial({color: 0xffffff}));
+                tip.position.y = 1.9; 
+                this.arrow.add(shaft, tip);
+                this.sceneB.add(this.arrow);
+
+                const trailGeo = new THREE.BufferGeometry();
+                trailGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(100 * 3), 3));
+                this.trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({color: 0x38bdf8, transparent: true, opacity: 0.7}));
+                this.sceneB.add(this.trail);
+
+                this.setupInteraction(this.rendererP.domElement, 'P');
+                this.setupInteraction(this.rendererB.domElement, 'B');
+                
+                window.addEventListener('mouseup', () => { 
+                    if (this.state.activeLaser) {
+                         const angle = this.state.laserAccumulatedAngle;
+                         if (Math.abs(angle) > 0.1) {
+                             const axis = this.state.activeLaser;
+                             this.state.circuitHistory.push({ type: `R${axis.toLowerCase()}`, label: `R${axis}(${(angle*180/Math.PI).toFixed(0)}°)`, color: axis === 'X' ? '#10b981' : (axis === 'Y' ? '#3b82f6' : '#8b5cf6')});
+                             this.updateCircuitUI();
+                             this.addCalcCard(`Laser Rotation`, `Manual R${axis}`, `|\\psi'\\rangle = R_${axis.toLowerCase()}(${angle.toFixed(2)})|\\psi\\rangle`);
+                             
+                             // FIX: Add Matrix Card for manual rotation
+                             const matrixMath = this.generateRotationMatrixMath(axis, angle, this.state.dragStartAlpha, this.state.dragStartBeta, this.state.alpha, this.state.beta);
+                             this.addMatrixCard(`Laser Rotation`, `Manual R${axis}`, matrixMath);
+                         }
+                    }
+                    this.state.activeLaser = null;
+                    this.state.laserAccumulatedAngle = 0;
+                    this.lasers.forEach(l => l.userData.beam.visible = false);
+                    this.isDraggingP = false;
+                    this.isDraggingB = false;
+                });
+                window.addEventListener('resize', () => this.onResize());
+            }
+
+            // NEW FUNCTION: Add pole labels to Bloch sphere
+            addPoleLabels(scene, radius) {
+                const poles = [
+                    { pos: new THREE.Vector3(0, radius + 0.4, 0), text: '|0⟩', color: '#60a5fa' }, // Blue |0>
+                    { pos: new THREE.Vector3(0, -radius - 0.4, 0), text: '|1⟩', color: '#fb923c' } // Orange |1>
+                ];
+                poles.forEach(p => {
+                    const canvas = document.createElement('canvas'); 
+                    canvas.width = 128; canvas.height = 64; 
+                    const ctx = canvas.getContext('2d'); 
+                    ctx.font = '500 48px "JetBrains Mono"'; // Updated Font
+                    ctx.fillStyle = p.color; 
+                    ctx.textAlign = 'center'; 
+                    ctx.textBaseline = 'middle'; 
+                    // Add glow effect
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = p.color;
+                    ctx.fillText(p.text, 64, 32);
+                    
+                    const material = new THREE.SpriteMaterial({ 
+                        map: new THREE.CanvasTexture(canvas), 
+                        transparent: true,
+                        opacity: 0.6, // Transparent
+                        blending: THREE.AdditiveBlending // Light blending
+                    });
+                    
+                    const sprite = new THREE.Sprite(material);
+                    sprite.position.copy(p.pos);
+                    sprite.scale.set(1.5, 0.75, 1); 
+                    scene.add(sprite);
+                });
+            }
+
+            setupDragAndDrop() {
+                const draggables = document.querySelectorAll('.uniform-box');
+                const container = document.getElementById('mainScroll');
+                draggables.forEach(draggable => {
+                    draggable.addEventListener('dragstart', (e) => {
+                        // Allow drag ONLY if target is panel-header
+                        if (!e.target.closest('.panel-header')) { e.preventDefault(); return; }
+                        
+                        // FIX: Defer adding the class so the ghost image is created from the visible element
+                        setTimeout(() => draggable.classList.add('dragging'), 0);
+                        
+                        // Crucial for Firefox drag start
+                        e.dataTransfer.setData('text/plain', '');
+                        e.dataTransfer.effectAllowed = 'move';
+                    });
+                    draggable.addEventListener('dragend', () => {
+                        draggable.classList.remove('dragging');
+                        this.onResize();
+                    });
+                });
+                container.addEventListener('dragover', (e) => {
+                    e.preventDefault(); // Necessary to allow dropping
+                    const afterElement = this.getDragAfterElement(container, e.clientX);
+                    const draggable = document.querySelector('.dragging');
+                    if (!draggable) return; // Safety check
+                    
+                    // Optimization: Only move if strictly necessary
+                    if (afterElement == null) {
+                        // If we are at the end, and the last child isn't the draggable, append
+                        if (container.lastElementChild !== draggable) {
+                            container.appendChild(draggable);
+                        }
+                    } else {
+                        // If the element after is not the draggable (i.e. we are not already in position)
+                        // And if the element after is not the one immediately after draggable (next sibling)
+                        if (afterElement !== draggable && draggable.nextElementSibling !== afterElement) {
+                            container.insertBefore(draggable, afterElement);
+                        }
+                    }
+                });
+            }
+
+            getDragAfterElement(container, x) {
+                const draggableElements = [...container.querySelectorAll('.uniform-box:not(.dragging)')];
+                return draggableElements.reduce((closest, child) => {
+                    const box = child.getBoundingClientRect();
+                    const offset = x - box.left - box.width / 2;
+                    if (offset < 0 && offset > closest.offset) return { offset: offset, element: child };
+                    else return closest;
+                }, { offset: Number.NEGATIVE_INFINITY }).element;
+            }
+
+            setupInteraction(el, viewId) {
+                el.addEventListener('mousedown', (e) => {
+                    const rect = el.getBoundingClientRect();
+                    const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                    const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+                    this.mouseLast = { x: e.clientX, y: e.clientY };
+                    if (viewId === 'P') {
+                        this.raycaster.setFromCamera({x, y}, this.cameraP);
+                        const intersects = this.raycaster.intersectObjects(this.lasers, true);
+                        if (intersects.length > 0) {
+                            let obj = intersects[0].object;
+                            while(obj && !obj.userData.id) obj = obj.parent;
+                            if(obj) { 
+                                this.state.activeLaser = obj.userData.id; 
+                                this.state.laserAccumulatedAngle = 0; 
+                                // FIX: Capture start state for matrix calculation
+                                this.state.dragStartAlpha = new Complex(this.state.alpha.re, this.state.alpha.im);
+                                this.state.dragStartBeta = new Complex(this.state.beta.re, this.state.beta.im);
+                                obj.userData.beam.visible = true; 
+                                return; 
+                            }
+                        }
+                        this.isDraggingP = true;
+                    } else { this.isDraggingB = true; }
+                });
+                el.addEventListener('mousemove', (e) => {
+                    if (viewId === 'P') {
+                        if (this.state.activeLaser) return; 
+                        const rect = el.getBoundingClientRect();
+                        const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                        const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+                        this.raycaster.setFromCamera({x, y}, this.cameraP);
+                        const intersects = this.raycaster.intersectObjects(this.lasers, true);
+                        const tooltip = document.getElementById('three-tooltip');
+                        if (intersects.length > 0) {
+                            let obj = intersects[0].object;
+                            while(obj && !obj.userData.id) obj = obj.parent;
+                            tooltip.style.display = 'block'; tooltip.style.left = e.clientX + 15 + 'px'; tooltip.style.top = e.clientY + 15 + 'px';
+                            tooltip.innerText = `Rotation Axis: ${obj.userData.id}`; el.style.cursor = 'pointer';
+                        } else { tooltip.style.display = 'none'; el.style.cursor = this.isDraggingP ? 'grabbing' : 'grab'; }
+                        this.handleOrbit(e, this.cameraP, this.isDraggingP, this.cameraTargetP);
+                    } else {
+                        el.style.cursor = this.isDraggingB ? 'grabbing' : 'grab';
+                        this.handleOrbit(e, this.cameraB, this.isDraggingB, new THREE.Vector3(0,0,0));
+                    }
+                });
+                el.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    const camera = viewId === 'P' ? this.cameraP : this.cameraB;
+                    const target = viewId === 'P' ? this.cameraTargetP : new THREE.Vector3(0,0,0);
+                    const vec = camera.position.clone().sub(target);
+                    const spherical = new THREE.Spherical().setFromVector3(vec);
+                    spherical.radius += e.deltaY * 0.01;
+                    spherical.radius = Math.max(2, Math.min(50, spherical.radius));
+                    camera.position.copy(target.clone().add(vec.setFromSpherical(spherical)));
+                    camera.lookAt(target);
+                });
+            }
+
+            handleOrbit(e, camera, isDragging, target) {
+                if (!isDragging) return;
+                const deltaX = e.clientX - this.mouseLast.x;
+                const deltaY = e.clientY - this.mouseLast.y;
+                this.mouseLast = { x: e.clientX, y: e.clientY };
+                const vec = camera.position.clone().sub(target);
+                const spherical = new THREE.Spherical().setFromVector3(vec);
+                spherical.theta -= deltaX * 0.005;
+                spherical.phi -= deltaY * 0.005;
+                spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, spherical.phi));
+                camera.position.copy(target.clone().add(vec.setFromSpherical(spherical)));
+                camera.lookAt(target);
+            }
+
+            addAxes(scene, len, labelScale) {
+                const axes = [{ dir: [1,0,0], color: 0xef4444, label: 'Y' }, { dir: [0,1,0], color: 0x22c55e, label: 'Z' }, { dir: [0,0,1], color: 0x3b82f6, label: 'X' }];
+                axes.forEach(a => {
+                    const dir = new THREE.Vector3(...a.dir);
+                    // Reduced arrow head size multiplier from 0.15/0.1 to 0.1/0.05
+                    scene.add(new THREE.ArrowHelper(dir, new THREE.Vector3(0,0,0), len, a.color, 0.1 * len, 0.05 * len));
+                    const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 128;
+                    const ctx = canvas.getContext('2d'); ctx.font = 'bold 80px Inter'; ctx.fillStyle = '#' + a.color.toString(16).padStart(6, '0');
+                    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(a.label, 64, 64);
+                    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true }));
+                    sprite.position.copy(dir.clone().multiplyScalar(len + 0.5)); sprite.scale.set(labelScale, labelScale, 1);
+                    scene.add(sprite);
+                });
+            }
+
+            createLaser(color, pos, id, scene) {
+                const grp = new THREE.Group(); grp.position.copy(pos); grp.lookAt(new THREE.Vector3(0, id === 'Z' ? this.FLOAT_Y : pos.y, 0));
+                const housing = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.5, 1, 16).rotateX(Math.PI/2), new THREE.MeshStandardMaterial({color: 0x1e293b, metalness: 0.5}));
+                const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.1, 16).rotateX(Math.PI/2).translate(0,0,0.5), new THREE.MeshStandardMaterial({color, emissive: color, emissiveIntensity: 1}));
+                const dist = pos.distanceTo(new THREE.Vector3(0, id === 'Z' ? this.FLOAT_Y : pos.y, 0));
+                const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, dist, 8).rotateX(Math.PI/2).translate(0,0,dist/2), new THREE.MeshBasicMaterial({color, transparent: true, opacity: 0.6}));
+                beam.visible = false; grp.add(housing, lens, beam); grp.userData = { id, beam }; scene.add(grp); return grp;
+            }
+
+            onResize() {
+                const p = document.getElementById('canvas-physical'); const b = document.getElementById('canvas-bloch'); if(!p || !b) return;
+                this.cameraP.aspect = p.clientWidth / p.clientHeight; this.cameraP.updateProjectionMatrix(); this.rendererP.setSize(p.clientWidth, p.clientHeight);
+                this.cameraB.aspect = b.clientWidth / b.clientHeight; this.cameraB.updateProjectionMatrix(); this.rendererB.setSize(b.clientWidth, b.clientHeight);
+            }
+
+            toggleCollapse(id) {
+                document.getElementById(id).classList.toggle('collapsed');
+                setTimeout(() => this.onResize(), 450);
+            }
+
+            syncStateFromRotation() {
+                const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.state.rotation);
+                const theta = Math.acos(Math.max(-1, Math.min(1, up.y)));
+                const phi = Math.atan2(up.x, up.z); 
+                this.state.alpha = new Complex(Math.cos(theta/2), 0);
+                this.state.beta = new Complex(Math.sin(theta/2) * Math.cos(phi), Math.sin(theta/2) * Math.sin(phi));
+            }
+
+            operate(gate) {
+                const a = this.state.alpha; const b = this.state.beta; let na, nb;
+                if (gate === 'X') { na = b; nb = a; } 
+                else if (gate === 'Y') { na = b.mul(new Complex(0, -1)); nb = a.mul(new Complex(0, 1)); } 
+                else if (gate === 'Z') { na = a; nb = b.mul(new Complex(-1, 0)); } 
+                else if (gate === 'H') { const invRoot2 = 1/Math.sqrt(2); na = a.add(b).mul(new Complex(invRoot2, 0)); nb = a.sub(b).mul(new Complex(invRoot2, 0)); }
+                this.state.alpha = na; this.state.beta = nb;
+            }
+            
+            getDiracLatex(a, b) {
+                let phase = 0; if (a.magSq() > 0.0001) phase = Math.atan2(a.im, a.re); else if (b.magSq() > 0.0001) phase = Math.atan2(b.im, b.re);
+                let normA = a; let normB = b;
+                if (Math.abs(phase) > 0.0001) { const rotator = new Complex(Math.cos(-phase), Math.sin(-phase)); normA = a.mul(rotator); normB = b.mul(rotator); }
+                const aStr = normA.toLatex(); const bStr = normB.toLatex(); const fmt = (s) => (s === "1" ? "" : (s === "-1" ? "-" : s));
+                let s = ""; if (aStr !== "0") s += fmt(aStr) + "|0\\rangle";
+                if (bStr !== "0") { const bFmt = fmt(bStr); s += (s !== "" && !bStr.startsWith("-") ? "+" : "") + bFmt + "|1\\rangle"; }
+                return s === "" ? "0" : s;
+            }
+
+            logInitialState() { 
+                const initMath = "|\\psi_0\\rangle = |0\\rangle";
+                this.addCalcCard("Initial State", "System Initialization", initMath);
+                this.addMatrixCard("Initial State", "Vector Initialization", "\\begin{bmatrix} 1 \\\\ 0 \\end{bmatrix}");
+            }
+
+            generateCalcSteps(gate, oldA, oldB, newA, newB) {
+                const transforms = {
+                    'X': { '0': '|1\\rangle', '1': '|0\\rangle' },
+                    'Y': { '0': 'i|1\\rangle', '1': '-i|0\\rangle' },
+                    'Z': { '0': '|0\\rangle', '1': '-|1\\rangle' },
+                    'H': { '0': '\\frac{|0\\rangle+|1\\rangle}{\\sqrt{2}}', '1': '\\frac{|0\\rangle-|1\\rangle}{\\sqrt{2}}' }
+                };
+
+                const formatCoeff = (c) => {
+                    let s = c.toLatex();
+                    if (s === '1') return ''; 
+                    if (s === '-1') return '-';
+                    // If it has + or -, wrap in parens if it's being multiplied
+                    if (s.includes('+') || s.includes('-')) {
+                        return s.startsWith('-') && !s.includes('+') ? s : `(${s})`;
+                    }
+                    return s;
+                };
+
+                // Reconstruct input state string for display
+                let sA = oldA.toLatex(); let sB = oldB.toLatex();
+                let inputStr = "";
+                
+                // Helper to render initial state cleanly
+                if (oldA.magSq() > 0.0001) {
+                    let c = (sA === '1' ? '' : (sA === '-1' ? '-' : sA));
+                    inputStr += `${c}|0\\rangle`;
+                }
+                if (oldB.magSq() > 0.0001) {
+                    let c = (sB === '1' ? '' : (sB === '-1' ? '-' : sB));
+                    // Add plus sign if not negative and not first term
+                    if (inputStr !== "" && !c.startsWith('-')) inputStr += "+";
+                    inputStr += `${c}|1\\rangle`;
+                }
+                if (inputStr === "") inputStr = "0"; 
+
+                // Build Expansion
+                let parts = [];
+                const isH = gate === 'H';
+
+                if (oldA.magSq() > 0.0001) {
+                    let c = formatCoeff(oldA);
+                    let trans = transforms[gate]['0'];
+                    if (isH) parts.push(`${c}\\left[${trans}\\right]`);
+                    else parts.push(`${c}${trans}`);
+                }
+
+                if (oldB.magSq() > 0.0001) {
+                    let c = formatCoeff(oldB);
+                    let trans = transforms[gate]['1'];
+                    // Logic for spacing/signs
+                    let prefix = "";
+                    if (parts.length > 0) {
+                         if (c.startsWith('-')) {
+                             prefix = "+"; // Let the negative sign in c handle it, but we need separator
+                         } else {
+                             prefix = "+";
+                         }
+                    }
+                    if (isH) parts.push(`${prefix} ${c}\\left[${trans}\\right]`);
+                    else parts.push(`${prefix} ${c}${trans}`);
+                }
+                
+                let expanded = parts.join(" ");
+                expanded = expanded.replace(/\+ \-/g, "- ");
+
+                const finalState = this.getDiracLatex(newA, newB);
+
+                return `\\begin{aligned} 
+                    ${gate}\\big(${inputStr}\\big) &= ${expanded} \\\\
+                    &= ${finalState}
+                \\end{aligned}`;
+            }
+
+            generateMatrixMath(gate, oldA, oldB, newA, newB) {
+                const matrices = {
+                    'X': '\\begin{bmatrix} 0 & 1 \\\\ 1 & 0 \\end{bmatrix}',
+                    'Y': '\\begin{bmatrix} 0 & -i \\\\ i & 0 \\end{bmatrix}',
+                    'Z': '\\begin{bmatrix} 1 & 0 \\\\ 0 & -1 \\end{bmatrix}',
+                    'H': '\\frac{1}{\\sqrt{2}}\\begin{bmatrix} 1 & 1 \\\\ 1 & -1 \\end{bmatrix}'
+                };
+
+                const vec = (a, b) => `\\begin{bmatrix} ${a.toLatex()} \\\\ ${b.toLatex()} \\end{bmatrix}`;
+                
+                return `\\begin{aligned} 
+                    ${matrices[gate]} ${vec(oldA, oldB)} &= ${vec(newA, newB)}
+                \\end{aligned}`;
+            }
+
+            generateRotationMatrixMath(axis, angle, oldA, oldB, newA, newB) {
+                const ht = angle / 2; // half theta
+                const c = Math.cos(ht);
+                const s = Math.sin(ht);
+                
+                // Helper to format complex number for matrix element
+                const fmt = (re, im) => new Complex(re, im).toLatex();
+
+                let mat = "";
+                if (axis === 'X') {
+                    // [ c, -i*s ]
+                    // [ -i*s, c ]
+                    mat = `\\begin{bmatrix} ${fmt(c,0)} & ${fmt(0,-s)} \\\\ ${fmt(0,-s)} & ${fmt(c,0)} \\end{bmatrix}`;
+                } else if (axis === 'Y') {
+                    // [ c, -s ]
+                    // [ s, c ]
+                    mat = `\\begin{bmatrix} ${fmt(c,0)} & ${fmt(-s,0)} \\\\ ${fmt(s,0)} & ${fmt(c,0)} \\end{bmatrix}`;
+                } else if (axis === 'Z') {
+                    // [ e^-iht, 0 ] -> cos(ht) - i*sin(ht)
+                    // [ 0, e^iht ] -> cos(ht) + i*sin(ht)
+                    mat = `\\begin{bmatrix} ${fmt(c,-s)} & 0 \\\\ 0 & ${fmt(c,s)} \\end{bmatrix}`;
+                }
+
+                const vec = (a, b) => `\\begin{bmatrix} ${a.toLatex()} \\\\ ${b.toLatex()} \\end{bmatrix}`;
+                return `\\begin{aligned} ${mat} ${vec(oldA, oldB)} &= ${vec(newA, newB)} \\end{aligned}`;
+            }
+
+            applyGate(type) {
+                if (this.state.isMeasuring) return; this.state.targetY = this.FLOAT_Y;
+                
+                // Capture old state for calculus display
+                const oldAlpha = new Complex(this.state.alpha.re, this.state.alpha.im);
+                const oldBeta = new Complex(this.state.beta.re, this.state.beta.im);
+
+                this.operate(type);
+
+                // Generate Step-by-Step Math
+                const mathBlock = this.generateCalcSteps(type, oldAlpha, oldBeta, this.state.alpha, this.state.beta);
+                const matrixBlock = this.generateMatrixMath(type, oldAlpha, oldBeta, this.state.alpha, this.state.beta);
+
+                const newStateStr = this.getDiracLatex(this.state.alpha, this.state.beta);
+                let axis = new THREE.Vector3(0, 1, 0); let angle = Math.PI;
+                if (type === 'X') axis.set(0,0,1); else if (type === 'Y') axis.set(1,0,0); else if (type === 'Z') axis.set(0,1,0); else if (type === 'H') axis.set(0,1,1).normalize();
+                this.state.gateQueue.push({ axis, angle });
+                this.state.circuitHistory.push({ type, label: type, color: '#e2e8f0' }); this.updateCircuitUI();
+                
+                this.addCalcCard(`${type} Gate`, "Unitary Transformation", mathBlock);
+                this.addMatrixCard(`${type} Gate`, "Matrix Multiplication", matrixBlock);
+                this.updateHistogram();
+            }
+
+            updateN(val) {
+                this.state.numMeasurements = parseInt(val) || 1;
+                // Update new float label
+                document.getElementById('floatLblN').innerText = this.state.numMeasurements;
+                
+                const floatPanel = document.getElementById('float-stats-panel');
+                if (this.state.numMeasurements > 1) {
+                    floatPanel.classList.remove('float-panel-exit');
+                    floatPanel.classList.add('float-panel-enter');
+                } else {
+                    floatPanel.classList.remove('float-panel-enter');
+                    floatPanel.classList.add('float-panel-exit');
+                    this.coinsMesh0.count = 0; 
+                    this.coinsMesh1.count = 0; 
+                }
+            }
+            
+            updateCircuitUI() {
+                const container = document.getElementById('circuit-container'); const history = this.state.circuitHistory;
+                let currentX = 80; let totalWidth = 80 + history.length * 80;
+                totalWidth = Math.max(container.clientWidth, totalWidth + 50);
+                let svg = `<svg width="${totalWidth}" height="100%"> <line x1="0" y1="40%" x2="${totalWidth}" y2="40%" class="circuit-line" /> <rect x="0" y="25%" width="40" height="30%" fill="#1e293b" stroke="#94a3b8" class="gate-box"/> <text x="20" y="40%" class="gate-text" fill="white">|0⟩</text>`;
+                history.forEach((gate) => {
+                    if(gate.type === 'M') {
+                        svg += `<svg x="${currentX}" y="25%" width="40" height="30%" viewBox="0 0 50 50" preserveAspectRatio="xMidYMid meet">
+                            <rect width="50" height="50" fill="#1e293b" stroke="#10b981" stroke-width="4" />
+                            <path d="M 10 40 Q 25 10 40 40" stroke="white" fill="none" stroke-width="4" />
+                            <line x1="25" y1="35" x2="35" y2="15" stroke="white" stroke-width="4" />
+                        </svg>`;
+                        currentX += 60;
+                    } else {
+                        const width = Math.max(40, gate.label.length * 9);
+                        svg += `<rect x="${currentX}" y="25%" width="${width}" height="30%" class="gate-box" stroke="${gate.color || '#e2e8f0'}"/> <text x="${currentX + width/2}" y="40%" class="gate-text">${gate.label}</text>`;
+                        currentX += width + 20;
+                    }
+                });
+                container.innerHTML = svg + `</svg>`; container.scrollLeft = container.scrollWidth;
+            }
+
+            updateHistogram() {
+                const p0 = this.state.alpha.magSq() * 100; const p1 = 100 - p0;
+                document.getElementById('hist-bar-0').style.height = `${p0}%`; document.getElementById('hist-val-0').innerText = `${p0.toFixed(0)}%`;
+                document.getElementById('hist-bar-1').style.height = `${p1}%`; document.getElementById('hist-val-1').innerText = `${p1.toFixed(0)}%`;
+            }
+
+            async measure() {
+                if (this.state.isMeasuring) return; this.state.isMeasuring = true; this.state.gateQueue = []; this.state.isAnimatingGate = false;
+                const p0 = this.state.alpha.magSq(); this.state.circuitHistory.push({ type: 'M', color: '#10b981' }); this.updateCircuitUI();
+                if (this.state.numMeasurements === 1) {
+                    const result = Math.random() < p0 ? 0 : 1;
+                    if (result === 0) { this.state.alpha = new Complex(1, 0); this.state.beta = new Complex(0, 0); this.state.targetRotation.set(0,0,0,1); } 
+                    else { this.state.alpha = new Complex(0, 0); this.state.beta = new Complex(1, 0); this.state.targetRotation.setFromAxisAngle(new THREE.Vector3(0,0,1), Math.PI); }
+                    
+                    // Reset Physics for Fall
+                    this.state.targetY = this.ORIGIN_Y; 
+                    this.state.vy = 0; // Reset velocity
+                    
+                    this.coinSystem.visible = true;
+                    const tag = document.getElementById('outcomeTag'); tag.innerText = `Measured: |${result}⟩`; tag.style.opacity = "1";
+                    setTimeout(() => { tag.style.opacity = "0"; this.state.isMeasuring = false; }, 4000);
+                    
+                    const mMath = `\\text{Outcome} \\rightarrow |${result}\\rangle`;
+                    const matrixMath = `\\text{Collapse} \\rightarrow \\begin{bmatrix} ${result===0?1:0} \\\\ ${result===0?0:1} \\end{bmatrix}`;
+                    this.addCalcCard("Measurement", "Collapse", mMath);
+                    this.addMatrixCard("Measurement", "Projection", matrixMath);
+                } else {
+                    this.coinSystem.visible = false; let c0 = 0; const outcomes = [];
+                    for(let i=0; i<this.state.numMeasurements; i++) { const r = Math.random() < p0 ? 0 : 1; outcomes.push(r); if(r===0) c0++; }
+                    
+                    const m0 = (c0 / this.state.numMeasurements * 100).toFixed(1);
+                    const m1 = (100 - parseFloat(m0)).toFixed(1);
+                    const c1 = this.state.numMeasurements - c0;
+
+                    // Update Floating Chart with check to avoid 0% height line
+                    const setBar = (idBar, idPct, pct) => {
+                        const bar = document.getElementById(idBar);
+                        const txt = document.getElementById(idPct);
+                        bar.style.height = pct + '%';
+                        // Only show padding and text if percentage is significant
+                        if (parseFloat(pct) > 0.5) {
+                            bar.style.paddingTop = '0.25rem'; // Tailwind pt-1
+                            txt.style.opacity = '1';
+                            txt.innerText = Math.round(pct) + '%';
+                        } else {
+                            bar.style.paddingTop = '0';
+                            txt.style.opacity = '0';
+                        }
+                    };
+                    
+                    setBar('float-bar-0', 'float-pct-0', m0);
+                    setBar('float-bar-1', 'float-pct-1', m1);
+                    
+                    document.getElementById('float-val-0').innerText = c0;
+                    document.getElementById('float-val-1').innerText = c1;
+                    
+                    this.spawnDroppedCoins(outcomes); this.state.isMeasuring = false;
+                    
+                    const mMath = `P(0) \\approx ${m0}\\%`;
+                    this.addCalcCard("Measurement", `Ensemble (N=${this.state.numMeasurements})`, mMath);
+                    this.addMatrixCard("Measurement", `Ensemble (N=${this.state.numMeasurements})`, mMath);
+                }
+                this.updateHistogram();
+            }
+
+            spawnDroppedCoins(outcomes) {
+                let c0 = 0, c1 = 0; const dummy = new THREE.Object3D();
+                this.state.droppedCoins = outcomes.map(outcome => ({ type: outcome, index: (outcome === 0 ? c0++ : c1++), x: (Math.random()-0.5)*8, y: this.FLOAT_Y + Math.random()*2, z: (Math.random()-0.5)*8, vy: 0, rotX: Math.random()*Math.PI, rotZ: Math.random()*Math.PI, landed: false }));
+                this.coinsMesh0.count = c0; this.coinsMesh1.count = c1;
+            }
+
+            reset() {
+                this.state.alpha = new Complex(1, 0); this.state.beta = new Complex(0, 0); this.state.gateQueue = []; this.state.targetRotation.set(0,0,0,1); this.state.targetY = this.FLOAT_Y;
+                this.state.vy = 0; // Reset velocity
+                this.coinsMesh0.count = 0; this.coinsMesh1.count = 0; this.state.droppedCoins = []; this.coinSystem.visible = true; this.state.circuitHistory = [];
+                
+                // Reset floating panel completely
+                const resetBar = (idBar, idPct) => {
+                    const bar = document.getElementById(idBar);
+                    const txt = document.getElementById(idPct);
+                    bar.style.height = '0%';
+                    bar.style.paddingTop = '0';
+                    txt.style.opacity = '0';
+                };
+                resetBar('float-bar-0', 'float-pct-0');
+                resetBar('float-bar-1', 'float-pct-1');
+                
+                document.getElementById('float-val-0').innerText = '0';
+                document.getElementById('float-val-1').innerText = '0';
+
+                document.getElementById('calc-steps-container').innerHTML = ""; document.getElementById('calc-placeholder').style.display = "block";
+                document.getElementById('matrix-steps-container').innerHTML = ""; document.getElementById('matrix-placeholder').style.display = "block";
+                
+                this.updateUI(); this.updateCircuitUI(); this.updateHistogram(); this.logInitialState();
+            }
+
+            addCalcCard(title, subtitle, math) {
+                document.getElementById('calc-placeholder').style.display = "none";
+                const card = document.createElement('div'); card.className = "p-6 border-l-4 border-white/10 mb-8 bg-white/5 rounded-r-2xl";
+                card.innerHTML = `<div class="text-white text-xl font-black uppercase chalkboard tracking-widest">${title}</div><div class="text-white/30 text-sm chalkboard mb-4">${subtitle}</div><div class="algebra-step">\\[ ${math} \\]</div>`;
+                document.getElementById('calc-steps-container').appendChild(card);
+                if (window.MathJax?.typesetPromise) window.MathJax.typesetPromise([card]).then(() => card.querySelector('.algebra-step').classList.add('writing'));
+            }
+
+            addMatrixCard(title, subtitle, math) {
+                document.getElementById('matrix-placeholder').style.display = "none";
+                const card = document.createElement('div'); card.className = "p-6 border-l-4 border-white/10 mb-8 bg-white/5 rounded-r-2xl";
+                card.innerHTML = `<div class="text-white text-xl font-black uppercase chalkboard tracking-widest">${title}</div><div class="text-white/30 text-sm chalkboard mb-4">${subtitle}</div><div class="algebra-step">\\[ ${math} \\]</div>`;
+                document.getElementById('matrix-steps-container').appendChild(card);
+                if (window.MathJax?.typesetPromise) window.MathJax.typesetPromise([card]).then(() => card.querySelector('.algebra-step').classList.add('writing'));
+            }
+
+            updateUI() {
+                const header = document.getElementById('headerDirac'); if(!header) return;
+                const a = this.state.alpha, b = this.state.beta;
+                const diracHtml = this.getDiracLatex(a, b);
+                header.innerHTML = `\\( |\\Psi\\rangle = ${diracHtml} \\)`;
+                if (window.MathJax?.typesetPromise) window.MathJax.typesetPromise([header]);
+
+                const statusEl = document.getElementById('headerStatus');
+                const isPure = (a.magSq() > 0.999 || b.magSq() > 0.999);
+                statusEl.innerText = isPure ? "" : "SUPERPOSITION";
+                statusEl.className = `text-[9px] font-bold uppercase tracking-widest mt-1 text-blue-500`;
+                statusEl.style.opacity = isPure ? "0" : "1";
+                
+                const p0 = Math.round(a.magSq() * 100);
+                document.getElementById('p0-num').innerText = p0 + '%'; document.getElementById('p1-num').innerText = (100-p0) + '%';
+                document.getElementById('bar0').style.width = p0 + '%'; document.getElementById('bar1').style.width = (100-p0) + '%';
+            }
+
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                const t = Date.now();
+
+                if(this.state.activeLaser) {
+                    const speed = 0.04; const axis = new THREE.Vector3(0,0,1);
+                    if(this.state.activeLaser === 'Y') axis.set(1,0,0); else if(this.state.activeLaser === 'Z') axis.set(0,1,0);
+                    this.state.rotation.premultiply(new THREE.Quaternion().setFromAxisAngle(axis, speed));
+                    this.state.targetRotation.copy(this.state.rotation); this.state.laserAccumulatedAngle += speed;
+                    this.syncStateFromRotation(); this.updateHistogram();
+                } else if (this.state.gateQueue.length > 0 || this.state.isAnimatingGate) {
+                    if (!this.state.isAnimatingGate) { this.state.currentGate = this.state.gateQueue.shift(); this.state.gateProgress = 0; this.state.isAnimatingGate = true; }
+                    const step = Math.min(0.15, this.state.currentGate.angle - this.state.gateProgress);
+                    this.state.rotation.premultiply(new THREE.Quaternion().setFromAxisAngle(this.state.currentGate.axis, step));
+                    this.state.gateProgress += step;
+                    if (this.state.gateProgress >= this.state.currentGate.angle) { this.state.isAnimatingGate = false; this.state.targetRotation.copy(this.state.rotation); }
+                } else this.state.rotation.slerp(this.state.targetRotation, 0.1);
+
+                // --- Improved Physical Animation ---
+                // Detect if we are in "Float" mode (target is high) or "Drop" mode (target is low)
+                const isFloating = Math.abs(this.state.targetY - this.FLOAT_Y) < 0.1;
+
+                if (isFloating) {
+                    // Sophisticated Wiggle: Multi-frequency noise for instability
+                    const wiggleY = Math.sin(t * 0.003) * 0.1 + Math.sin(t * 0.01) * 0.02;
+                    
+                    // Smoothly rise/stay at float height
+                    this.state.currentY += (this.state.targetY - this.state.currentY) * 0.05;
+                    this.coinSystem.position.y = this.state.currentY + wiggleY;
+
+                    // Add magnetic instability (Tilting on X/Z axes) without spinning Y axis
+                    // We apply this to the mesh inside the group to avoid fighting the main quaternion
+                    this.coin.rotation.x = Math.sin(t * 0.002) * 0.05; 
+                    this.coin.rotation.z = Math.cos(t * 0.0017) * 0.05; 
+                    
+                    // Ensure NO Z-axis spinning relative to the coin face (which is technically Y-axis in cylinder local space)
+                    // (Three.js Cylinder is Y-up, so local Y is the face normal. We ensure no rotation around Y)
+                    this.coin.rotation.y = 0; 
+
+                } else {
+                    // Falling Physics (Gravity + Bounce)
+                    this.state.vy -= 0.02; // Gravity
+                    this.state.currentY += this.state.vy;
+                    
+                    // Floor collision
+                    if (this.state.currentY <= 0) {
+                        this.state.currentY = 0;
+                        this.state.vy = -this.state.vy * 0.4; // Bounce with damping
+                        if (Math.abs(this.state.vy) < 0.01) this.state.vy = 0; // Stop micro-bouncing
+                    }
+                    
+                    this.coinSystem.position.y = this.state.currentY;
+                    
+                    // Dampen the wiggle angles to 0 as it settles
+                    this.coin.rotation.x *= 0.9;
+                    this.coin.rotation.z *= 0.9;
+                }
+
+                this.coinSystem.quaternion.copy(this.state.rotation);
+                
+                // Trail and dropped coins logic
+                const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.state.rotation);
+                this.arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), up);
+                this.state.trailHistory.push(up.clone().multiplyScalar(2)); if(this.state.trailHistory.length>100) this.state.trailHistory.shift();
+                const pos = this.trail.geometry.attributes.position.array; this.state.trailHistory.forEach((p, i) => { pos[i*3]=p.x; pos[i*3+1]=p.y; pos[i*3+2]=p.z; });
+                this.trail.geometry.attributes.position.needsUpdate = true;
+                const dummy = new THREE.Object3D();
+                this.state.droppedCoins.forEach(c => {
+                    if(!c.landed) { c.vy-=0.02; c.y+=c.vy; c.rotX+=0.1; if(c.y<=0) { c.y=0.025; c.landed=true; c.vy=0; c.rotX=0; c.rotZ=Math.random()*Math.PI*2; } }
+                    dummy.position.set(c.x, c.y, c.z); dummy.rotation.set(c.landed && c.type===1 ? Math.PI : c.rotX, c.rotZ, 0); dummy.updateMatrix();
+                    (c.type===0 ? this.coinsMesh0 : this.coinsMesh1).setMatrixAt(c.index, dummy.matrix);
+                });
+                this.coinsMesh0.instanceMatrix.needsUpdate = true; this.coinsMesh1.instanceMatrix.needsUpdate = true;
+                this.rendererP.render(this.sceneP, this.cameraP); this.rendererB.render(this.sceneB, this.cameraB); this.updateUI();
+            }
+        }
+        window.onload = () => { window.app = new QuApp(); };
+    </script>
+</body>
+</html>
