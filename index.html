@@ -86,6 +86,9 @@
         .c-entangle { --accent: #f472b6; }
         .c-entangle .icon-tile { background: rgba(244,114,182,0.1); color: #f472b6; border: 1px solid rgba(244,114,182,0.3); }
 
+        .c-pqc { --accent: #34d399; }
+        .c-pqc .icon-tile { background: rgba(52,211,153,0.1); color: #34d399; border: 1px solid rgba(52,211,153,0.3); }
+
         .open-btn {
             display: inline-flex;
             align-items: center;
@@ -210,6 +213,23 @@
                     <span class="pill">CNOT</span>
                 </div>
                 <div class="open-btn">Open simulator <i class="fa-solid fa-arrow-right text-xs"></i></div>
+            </a>
+
+            <a href="https://ioeacademy.github.io/cisco-pqc-vpn-wasm/index.html" class="card c-pqc p-7 block md:col-span-2">
+                <span class="badge">05 &middot; Applied</span>
+                <div class="icon-tile"><i class="fa-solid fa-shield-halved"></i></div>
+                <h2 class="text-2xl font-bold text-white mb-2">Post-Quantum VPN <span class="text-sm font-normal text-emerald-400/70 ml-2">(external)</span></h2>
+                <p class="text-slate-400 text-sm leading-relaxed">
+                    Interactive Cisco IOS XE simulator (WebAssembly) for building IPSec / IKEv2 site-to-site VPNs —
+                    from classical configuration to post-quantum hybrid key exchange with ML-KEM and RFC 8784 PSKs.
+                </p>
+                <div class="flex flex-wrap gap-2 mt-4">
+                    <span class="pill">ML-KEM</span>
+                    <span class="pill">IKEv2 / VTI</span>
+                    <span class="pill">RFC 8784</span>
+                    <span class="pill">WebAssembly</span>
+                </div>
+                <div class="open-btn">Open simulator <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></div>
             </a>
 
         </section>
