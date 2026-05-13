@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Foundation — Quantum & Classical Simulators</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600;800&family=Caveat:wght@700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #020617;
+            color: #e2e8f0;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .script { font-family: 'Caveat', cursive; }
+
+        .bg-pattern {
+            background-image: radial-gradient(#1e293b 1px, transparent 1px);
+            background-size: 28px 28px;
+            position: fixed;
+            inset: 0;
+            z-index: -2;
+            opacity: 0.5;
+        }
+        .bg-glow {
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            background:
+                radial-gradient(circle at 15% 20%, rgba(56,189,248,0.10), transparent 40%),
+                radial-gradient(circle at 85% 75%, rgba(192,132,252,0.10), transparent 40%),
+                radial-gradient(circle at 50% 50%, rgba(244,114,182,0.05), transparent 60%);
+            pointer-events: none;
+        }
+
+        .card {
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid #1e293b;
+            border-radius: 1.25rem;
+            transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+            overflow: hidden;
+            position: relative;
+        }
+        .card:hover {
+            transform: translateY(-4px);
+            border-color: var(--accent, #38bdf8);
+            box-shadow: 0 20px 50px -10px rgba(0,0,0,0.6), 0 0 30px -10px var(--accent, #38bdf8);
+        }
+        .card .badge {
+            position: absolute;
+            top: 16px; right: 16px;
+            font-size: 0.65rem;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #94a3b8;
+            font-weight: 700;
+        }
+        .icon-tile {
+            width: 56px; height: 56px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            margin-bottom: 18px;
+        }
+
+        .c-classic { --accent: #f8fafc; }
+        .c-classic .icon-tile { background: rgba(248,250,252,0.08); color: #f8fafc; border: 1px solid rgba(248,250,252,0.2); }
+
+        .c-hspec { --accent: #60a5fa; }
+        .c-hspec .icon-tile { background: rgba(96,165,250,0.1); color: #60a5fa; border: 1px solid rgba(96,165,250,0.3); }
+
+        .c-qubit { --accent: #c084fc; }
+        .c-qubit .icon-tile { background: rgba(192,132,252,0.1); color: #c084fc; border: 1px solid rgba(192,132,252,0.3); }
+
+        .c-entangle { --accent: #f472b6; }
+        .c-entangle .icon-tile { background: rgba(244,114,182,0.1); color: #f472b6; border: 1px solid rgba(244,114,182,0.3); }
+
+        .open-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+            font-size: 0.875rem;
+            color: var(--accent, #38bdf8);
+            margin-top: 18px;
+            transition: gap 0.2s;
+        }
+        .card:hover .open-btn { gap: 14px; }
+
+        .pill {
+            font-size: 0.7rem;
+            padding: 3px 10px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.05);
+            color: #94a3b8;
+            border: 1px solid rgba(255,255,255,0.08);
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-pattern"></div>
+    <div class="bg-glow"></div>
+
+    <header class="border-b border-slate-800/80 bg-slate-950/60 backdrop-blur-md sticky top-0 z-10">
+        <div class="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-500/30 to-fuchsia-500/30 border border-slate-700 flex items-center justify-center">
+                    <i class="fa-solid fa-atom text-sky-400"></i>
+                </div>
+                <div>
+                    <div class="text-white font-extrabold tracking-tight">Foundation</div>
+                    <div class="text-[11px] uppercase tracking-widest text-slate-500 mono">Interactive Physics Simulators</div>
+                </div>
+            </div>
+            <a href="https://github.com/ioeacademy/foundation" target="_blank" rel="noopener" class="text-slate-400 hover:text-white text-sm flex items-center gap-2 transition-colors">
+                <i class="fa-brands fa-github"></i>
+                <span class="hidden sm:inline">View on GitHub</span>
+            </a>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-6 py-16">
+        <section class="text-center mb-14">
+            <div class="inline-block text-[11px] tracking-[0.3em] text-sky-400 uppercase font-semibold mono mb-4 px-4 py-1 rounded-full border border-sky-500/30 bg-sky-500/5">
+                Quantum &middot; Classical &middot; Visual
+            </div>
+            <h1 class="text-4xl sm:text-5xl md:text-6xl font-extrabold text-white tracking-tight leading-tight">
+                From a single <span class="script text-sky-400 text-5xl sm:text-6xl md:text-7xl">bit</span>
+                to <span class="script text-fuchsia-400 text-5xl sm:text-6xl md:text-7xl">entanglement</span>.
+            </h1>
+            <p class="text-slate-400 max-w-2xl mx-auto mt-6 text-lg">
+                A collection of interactive simulators that visualize the leap from classical computing
+                to quantum mechanics — each running entirely in your browser.
+            </p>
+        </section>
+
+        <section class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+            <a href="ClassicBit.html" class="card c-classic p-7 block">
+                <span class="badge">01 &middot; Classical</span>
+                <div class="icon-tile"><i class="fa-solid fa-microchip"></i></div>
+                <h2 class="text-2xl font-bold text-white mb-2">Classical Bit</h2>
+                <p class="text-slate-400 text-sm leading-relaxed">
+                    Switch, voltmeter, state-space, digital logic gates, and the linear-combination math view —
+                    four perspectives on a single classical bit.
+                </p>
+                <div class="flex flex-wrap gap-2 mt-4">
+                    <span class="pill">Physical</span>
+                    <span class="pill">Logic Gates</span>
+                    <span class="pill">Math</span>
+                </div>
+                <div class="open-btn">Open simulator <i class="fa-solid fa-arrow-right text-xs"></i></div>
+            </a>
+
+            <a href="HSpectroscopy.html" class="card c-hspec p-7 block">
+                <span class="badge">02 &middot; Atomic</span>
+                <div class="icon-tile"><i class="fa-solid fa-atom"></i></div>
+                <h2 class="text-2xl font-bold text-white mb-2">Hydrogen Spectroscopy</h2>
+                <p class="text-slate-400 text-sm leading-relaxed">
+                    3D explorer of the Hydrogen atom across Bohr, de Broglie, and Schrödinger models.
+                    Tune photon energy, find resonances on Lyman & Balmer series.
+                </p>
+                <div class="flex flex-wrap gap-2 mt-4">
+                    <span class="pill">3D / Three.js</span>
+                    <span class="pill">Photon Absorption</span>
+                    <span class="pill">Orbitals</span>
+                </div>
+                <div class="open-btn">Open simulator <i class="fa-solid fa-arrow-right text-xs"></i></div>
+            </a>
+
+            <a href="Qubit.html" class="card c-qubit p-7 block">
+                <span class="badge">03 &middot; Quantum</span>
+                <div class="icon-tile"><i class="fa-solid fa-circle-nodes"></i></div>
+                <h2 class="text-2xl font-bold text-white mb-2">Qubit</h2>
+                <p class="text-slate-400 text-sm leading-relaxed">
+                    Single-qubit playground — superposition, the Bloch sphere, and gate operations.
+                    The quantum analogue of the classical bit.
+                </p>
+                <div class="flex flex-wrap gap-2 mt-4">
+                    <span class="pill">Bloch Sphere</span>
+                    <span class="pill">Superposition</span>
+                    <span class="pill">Gates</span>
+                </div>
+                <div class="open-btn">Open simulator <i class="fa-solid fa-arrow-right text-xs"></i></div>
+            </a>
+
+            <a href="Entanglement.html" class="card c-entangle p-7 block">
+                <span class="badge">04 &middot; Quantum</span>
+                <div class="icon-tile"><i class="fa-solid fa-link"></i></div>
+                <h2 class="text-2xl font-bold text-white mb-2">Entanglement</h2>
+                <p class="text-slate-400 text-sm leading-relaxed">
+                    Two-qubit circuit composer. Drag H, X, Z, CNOT gates onto the wires and watch
+                    Bell states emerge — with full matrix and Dirac derivations.
+                </p>
+                <div class="flex flex-wrap gap-2 mt-4">
+                    <span class="pill">Bell States</span>
+                    <span class="pill">Tensor Product</span>
+                    <span class="pill">CNOT</span>
+                </div>
+                <div class="open-btn">Open simulator <i class="fa-solid fa-arrow-right text-xs"></i></div>
+            </a>
+
+        </section>
+
+        <section class="mt-16 text-center text-slate-500 text-sm">
+            <p>Built with vanilla HTML, Tailwind, Three.js, and MathJax. No backend — everything runs locally in the browser.</p>
+        </section>
+    </main>
+
+    <footer class="border-t border-slate-800/60 mt-10">
+        <div class="max-w-6xl mx-auto px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+            <div class="mono">ioeacademy / foundation</div>
+            <div class="flex items-center gap-4">
+                <a href="https://github.com/ioeacademy/foundation" target="_blank" rel="noopener" class="hover:text-white transition-colors">GitHub</a>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
